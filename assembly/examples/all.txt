@@ -1,0 +1,76 @@
+PASS
+VALUE 69
+VALUE -69
+JUMP foo
+BRANCH I foo
+BRANCH !I foo
+BRANCH Z foo
+BRANCH !Z foo
+BRANCH N foo
+BRANCH !N foo
+BRANCH V foo
+BRANCH !V foo
+BRANCH C foo
+BRANCH !C foo
+BRANCH EQ foo
+BRANCH NE foo
+BRANCH LO foo
+BRANCH HI foo
+BRANCH LS foo
+BRANCH HS foo
+BRANCH LT foo
+BRANCH GT foo
+BRANCH LE foo
+BRANCH GE foo
+BRANCH EQ foo
+PUSH %0
+POP %1
+CALL foo
+RETURN
+ADD %2
+ROTATE 4 %3
+
+DUP
+NOT
+KREAD
+PREAD
+INC
+CINC
+DEC
+CDEC
+NEG
+CNEG
+KSETF
+PSETF
+RSH
+CRSH
+IRSH
+ARSH
+
+SWAP %4
+SUB %5
+KWRITE %6
+PWRITE %7
+AND %8
+NAND %9
+OR %10
+NOR %11
+XOR %12
+NXOR %13
+SETF %14
+CMP %15
+SADD %A
+SSUB %B
+CADD %C
+CSUB %D
+
+INPUT
+OUTPUT 2.1.1.6.7.2.4.3.0.2.0.1.2.3.4.5.6.7
+
+..AUTO
+..ROM 7
+..RAM
+
+.LABEL foo
+.COMMENT "if the next branch after this doesn't not use the flags as they are after this point then the program will not compile"
+.USEFLAGS

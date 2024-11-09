@@ -1,0 +1,191 @@
+use crate::assembly::*;
+use std::str::FromStr;
+
+grammar;
+
+Label: Label = {
+    <label:r"[a-z|_]+"> => Label::new(String::from(label)).unwrap(),
+}
+
+NibbleNum: Nibble = {
+    "0" => Nibble::N0,
+    "1" => Nibble::N1,
+    "2" => Nibble::N2,
+    "3" => Nibble::N3,
+    "4" => Nibble::N4,
+    "5" => Nibble::N5,
+    "6" => Nibble::N6,
+    "7" => Nibble::N7,
+    "8" => Nibble::N8,
+    "9" => Nibble::N9,
+    "10" => Nibble::N10,
+    "A" => Nibble::N10,
+    "11" => Nibble::N11,
+    "B" => Nibble::N11,
+    "12" => Nibble::N12,
+    "C" => Nibble::N12,
+    "13" => Nibble::N13,
+    "D" => Nibble::N13,
+    "14" => Nibble::N14,
+    "E" => Nibble::N14,
+    "15" => Nibble::N15,
+    "F" => Nibble::N15,
+}
+
+SixteenBitNum: u16 = {
+    "0" => 0,
+    "1" => 1,
+    "2" => 2,
+    "3" => 3,
+    "4" => 4,
+    "5" => 5,
+    "6" => 6,
+    "7" => 7,
+    "8" => 8,
+    "9" => 9,
+    "10" => 10,
+    "11" => 11,
+    "12" => 12,
+    "13" => 13,
+    "14" => 14,
+    "15" => 15,
+    <value:r"[0-9]+"> => u16::from_str(value).unwrap(),
+    <value:r"-[0-9]+"> => i16::from_str(value).unwrap() as u16,
+}
+
+OctDigit: OctDigit = {
+    "0" => OctDigit::O0,
+    "1" => OctDigit::O1,
+    "2" => OctDigit::O2,
+    "3" => OctDigit::O3,
+    "4" => OctDigit::O4,
+    "5" => OctDigit::O5,
+    "6" => OctDigit::O6,
+    "7" => OctDigit::O7,
+}
+
+Register: Nibble = {
+    "%0" => Nibble::N0,
+    "%1" => Nibble::N1,
+    "%2" => Nibble::N2,
+    "%3" => Nibble::N3,
+    "%4" => Nibble::N4,
+    "%5" => Nibble::N5,
+    "%6" => Nibble::N6,
+    "%7" => Nibble::N7,
+    "%8" => Nibble::N8,
+    "%9" => Nibble::N9,
+    "%10" => Nibble::N10,
+    "%A" => Nibble::N10,
+    "%11" => Nibble::N11,
+    "%B" => Nibble::N11,
+    "%12" => Nibble::N12,
+    "%C" => Nibble::N12,
+    "%13" => Nibble::N13,
+    "%D" => Nibble::N13,
+    "%14" => Nibble::N14,
+    "%E" => Nibble::N14,
+    "%15" => Nibble::N15,
+    "%F" => Nibble::N15,
+}
+
+Condition: Condition = {
+    "I" => Condition::InputReady,
+    "!I" => Condition::InputNotReady,
+    "Z" => Condition::Equal,
+    "!Z" => Condition::NotEqual,
+    "N" => Condition::Negative,
+    "!N" => Condition::Positive,
+    "C" => Condition::HigherSame,
+    "!C" => Condition::Lower,
+    "V" => Condition::OverflowSet,
+    "!V" => Condition::OverflowClear,
+    "EQ" => Condition::Equal,
+    "NE" => Condition::NotEqual,
+    "HS" => Condition::HigherSame,
+    "LO" => Condition::Lower,
+    "HI" => Condition::Higher,
+    "LS" => Condition::LowerSame,
+    "GE" => Condition::GreaterEqual,
+    "LT" => Condition::Less,
+    "GT" => Condition::Greater,
+    "LE" => Condition::LessEqual,
+}
+
+Line: Line = {
+    "PASS" => Line::Command(Command::Pass),
+    "VALUE" <value:SixteenBitNum> => Line::Command(Command::Value(value)),
+    "JUMP" <l:Label> => Line::Command(Command::Jump(l)),
+    "BRANCH" <c:Condition> <l:Label> => Line::Command(Command::Branch(c, l)),
+    "PUSH" <r:Register> => Line::Command(Command::Push(r)),
+    "POP" <r:Register> => Line::Command(Command::Pop(r)),
+    "CALL" <l:Label> => Line::Command(Command::Call(l)),
+    "RETURN" => Line::Command(Command::Return),
+    "ADD" <r:Register> => Line::Command(Command::Add(r)),
+    "ROTATE" <s:NibbleNum> <r:Register> => Line::Command(Command::Rotate{ shift : s, register : r }),
+
+    "DUP" => Line::Command(Command::Duplicate),
+    "NOT" => Line::Command(Command::Not),
+    "KREAD" => Line::Command(Command::Read),
+    "PREAD" => Line::Command(Command::ReadPop),
+    "INC" => Line::Command(Command::Increment),
+    "CINC" => Line::Command(Command::IncrementWithCarry),
+    "DEC" => Line::Command(Command::Decrement),
+    "CDEC" => Line::Command(Command::DecrementWithCarry),
+    "NEG" => Line::Command(Command::Negate),
+    "CNEG" => Line::Command(Command::NegateWithCarry),
+    "KSETF" => Line::Command(Command::NoopSetFlags),
+    "PSETF" => Line::Command(Command::PopSetFlags),
+    "RSH" => Line::Command(Command::RightShift),
+    "CRSH" => Line::Command(Command::RightShiftCarryIn),
+    "IRSH" => Line::Command(Command::RightShiftOneIn),
+    "ARSH" => Line::Command(Command::ArithmeticRightShift),
+
+    "SWAP" <r:Register> => Line::Command(Command::Swap(r)),
+    "SUB" <r:Register> => Line::Command(Command::Sub(r)),
+    "KWRITE" <r:Register> => Line::Command(Command::Write(r)),
+    "PWRITE" <r:Register> => Line::Command(Command::WritePop(r)),
+    "AND" <r:Register> => Line::Command(Command::And(r)),
+    "NAND" <r:Register> => Line::Command(Command::Nand(r)),
+    "OR" <r:Register> => Line::Command(Command::Or(r)),
+    "NOR" <r:Register> => Line::Command(Command::Nor(r)),
+    "XOR" <r:Register> => Line::Command(Command::Xor(r)),
+    "NXOR" <r:Register> => Line::Command(Command::NXor(r)),
+    "SETF" <r:Register> => Line::Command(Command::RegToFlags(r)),
+    "CMP" <r:Register> => Line::Command(Command::Compare(r)),
+    "SADD" <r:Register> => Line::Command(Command::SwapAdd(r)),
+    "SSUB" <r:Register> => Line::Command(Command::SwapSub(r)),
+    "CADD" <r:Register> => Line::Command(Command::AddWithCarry(r)),
+    "CSUB" <r:Register> => Line::Command(Command::SubWithCarry(r)),
+
+    "RAWRAMCALL" => Line::Command(Command::RawRamCall),
+    "INPUT" => Line::Command(Command::Input),
+    "OUTPUT" <addr:DotSepNonEmpty<OctDigit>> => Line::Command(Command::Output(addr)),
+
+    "..AUTO" => Line::Meta(Meta::AutoPage),
+    "..ROM" <n:NibbleNum> => Line::Meta(Meta::RomPage(n)),
+    "..RAM" => Line::Meta(Meta::RamPage),
+    ".LABEL" <l:Label> => Line::Meta(Meta::Label(l)),
+    ".USEFLAGS" => Line::Meta(Meta::UseFlags),
+
+    ".COMMENT" <c:r#""[0-9|a-z|A-Z|\s|']*""#> => Line::Meta(Meta::Comment),
+};
+
+pub Program: Program = {
+    <lines:Concat<Line>> => Program::new(lines),
+}
+
+Concat<T>: Vec<T> = {
+    => vec![],
+    <mut v:(<T>)*> <e:T> => {
+        v.push(e);
+        v
+    }
+};
+
+DotSepNonEmpty<T>: Vec<T> = {
+    <mut v:(<T> ".")*> <e:T> => {
+        v.push(e);
+        v
+    }
+};
