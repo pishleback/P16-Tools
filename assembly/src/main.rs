@@ -1,3 +1,5 @@
+use std::{thread::sleep, time::Duration};
+
 pub mod assembly;
 pub mod compile;
 pub mod memory;
@@ -15,6 +17,21 @@ pub enum OctDigit {
     O7,
 }
 impl OctDigit {
+    pub fn new(oct: u8) -> Self {
+        match oct {
+            0 => Self::O0,
+            1 => Self::O1,
+            2 => Self::O2,
+            3 => Self::O3,
+            4 => Self::O4,
+            5 => Self::O5,
+            6 => Self::O6,
+            7 => Self::O7,
+            _ => {
+                panic!()
+            }
+        }
+    }
     pub fn as_u8(self) -> u8 {
         match self {
             OctDigit::O0 => 0,
@@ -77,28 +94,54 @@ impl Nibble {
 fn main() {
     // std::env::set_var("RUST_BACKTRACE", "1");
 
-    let result = assembly::assembly_grammar::ProgramParser::new().parse(
-        r#"
+    let source = "\
 ..ROM 0
-VALUE 0
-NOT
-NOT
-BRANCH Z foo
-VALUE 0
-JUMP bar
-.LABEL foo
-VALUE 1
-.LABEL bar
+CALL run
 RETURN
-    "#,
-    );
 
-    println!("{:#?}", result);
+..ROM 1
+.LABEL run
+VALUE 1
+DUP
+POP %0
+.LABEL loop
+DUP
+OUTPUT 1.0
+SADD %0
+.USEFLAGS
+BRANCH C end
+JUMP loop
+.LABEL end
+RETURN";
+    println!("===Source===");
+    println!("{source}");
+    println!();
 
+    let result = assembly::assembly_grammar::ProgramParser::new().parse(source);
     let result = result.unwrap();
+
     let mem = result.compile();
+    println!("===Memory===");
     mem.pprint();
-    println!("{:?}", mem.run());
+    println!();
+
+    let file = std::fs::File::create("../memory.json").unwrap();
+    serde_json::to_writer(file, &mem.to_json()).unwrap();
+
+    let mut sim = mem.simulator();
+    sim.subscribe_to_output(Box::new(|addr, value| {
+        println!("{:?} {:?}", addr, value);
+    }));
+    let input = sim.input();
+    std::thread::spawn(move || {
+        sleep(Duration::from_millis(1000));
+        input.lock().unwrap().push(3);
+        sleep(Duration::from_millis(1000));
+        input.lock().unwrap().push(5);
+    });
+
+    println!("===Execute===");
+    println!("{:?}", sim.run(false, false));
 
     // println!("{:?}", result);
 

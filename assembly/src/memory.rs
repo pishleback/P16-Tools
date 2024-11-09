@@ -87,6 +87,41 @@ impl Memory {
         &self.ram
     }
 
+    pub fn rom_page(&self, nibble: Nibble) -> &RomPage {
+        &self.rom[nibble.as_usize()]
+    }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        let mut json = serde_json::Map::new();
+        json.insert(
+            format!("rom"),
+            serde_json::Value::Array(
+                self.rom
+                    .iter()
+                    .map(|page| {
+                        serde_json::Value::Array(
+                            page.data
+                                .iter()
+                                .map(|n| serde_json::Value::Number(n.as_u8().into()))
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            ),
+        );
+        json.insert(
+            format!("ram"),
+            serde_json::Value::Array(
+                self.ram
+                    .data
+                    .iter()
+                    .map(|v| serde_json::Value::Number((*v).into()))
+                    .collect(),
+            ),
+        );
+        serde_json::Value::Object(json)
+    }
+
     pub fn new(rom: [[Nibble; 256]; 16], ram: [Nibble; 1 << (12 + 2)]) -> Self {
         Self {
             rom: core::array::from_fn(|i| RomPage {
@@ -108,10 +143,6 @@ impl Memory {
         let rom = core::array::from_fn(|_i| RomPage::zeros());
         let ram = RamMem::zeros();
         Self { rom, ram }
-    }
-
-    pub fn rom_page(&self, nibble: Nibble) -> &RomPage {
-        &self.rom[nibble.as_usize()]
     }
 
     pub fn pprint(&self) {

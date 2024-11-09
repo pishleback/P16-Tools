@@ -1,4 +1,7 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::{HashMap, VecDeque},
+    hash::Hash,
+};
 
 use super::Nibble;
 use crate::assembly::{Label, Line, Meta, Program};
@@ -134,6 +137,8 @@ impl MemoryManager {
             memory_manager: self,
             page,
             ptr,
+            flags_as_set: FlagsSetBy::Unknown,
+            flags_delay_queue: (0..6).map(|_i| FlagsSetBy::Unknown).collect(),
         }
     }
     fn finish(mut self) -> Memory {
@@ -185,11 +190,22 @@ impl MemoryManager {
         self.memory
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+enum FlagsSetBy {
+    Unreachable,
+    Unknown,
+    Nibble(u8),
+}
+
 #[derive(Debug)]
 struct MemoryPageManager<'a> {
     memory_manager: &'a mut MemoryManager,
     page: PageLocation,
     ptr: u8,
+    // Current start of the flags as
+    flags_as_set: FlagsSetBy,
+    flags_delay_queue: VecDeque<FlagsSetBy>,
 }
 impl<'a> MemoryPageManager<'a> {
     fn nibble_ptr(&self) -> MemNibblePtr {
@@ -197,6 +213,45 @@ impl<'a> MemoryPageManager<'a> {
             PageLocation::Rom(nibble) => MemNibblePtr::Rom(nibble, self.ptr),
             PageLocation::Ram(base) => MemNibblePtr::Ram(4 * base as usize + self.ptr as usize),
         }
+    }
+    fn delayed_flags_for_branch(&self) -> FlagsSetBy {
+        *self.flags_delay_queue.back().unwrap()
+    }
+    fn tick_flags_delay(&mut self) {
+        self.flags_delay_queue.push_front(self.flags_as_set);
+        self.flags_delay_queue.pop_back().unwrap();
+    }
+    fn flush_flags(&mut self) {
+        self.flags_delay_queue = self
+            .flags_delay_queue
+            .iter()
+            .map(|_f| self.flags_as_set)
+            .collect();
+    }
+    fn set_flags(&mut self) {
+        self.flags_as_set = FlagsSetBy::Nibble(self.ptr);
+    }
+    fn unknown_flags(&mut self) {
+        self.flags_as_set = FlagsSetBy::Unknown;
+        self.flush_flags();
+    }
+    fn unreachable_flags(&mut self) {
+        self.flags_as_set = FlagsSetBy::Unreachable;
+        self.flush_flags();
+    }
+    fn wait_for_flags(&mut self, flags_set_on: u8) -> Option<usize> {
+        for (i, f) in self.flags_delay_queue.iter().rev().enumerate() {
+            match f {
+                FlagsSetBy::Unreachable => {}
+                FlagsSetBy::Unknown => {}
+                FlagsSetBy::Nibble(l) => {
+                    if *l == flags_set_on {
+                        return Some(i);
+                    }
+                }
+            }
+        }
+        None
     }
     fn inc(&mut self) {
         self.ptr = match self.ptr.checked_add(1) {
@@ -211,6 +266,7 @@ impl<'a> MemoryPageManager<'a> {
                 self.memory_manager.ram_ptr += 1;
             }
         }
+        self.tick_flags_delay();
     }
     fn push(&mut self, n: u8) {
         self.memory_manager
@@ -286,7 +342,7 @@ impl Program {
         {
             for (page, lines) in pages {
                 let mut code = code.new_page(page);
-
+                let mut useflags_line: Option<u8> = None;
                 for line in lines {
                     match line {
                         Line::Command(command) => match command {
@@ -309,6 +365,46 @@ impl Program {
                                 code.label_target(label);
                             }
                             crate::assembly::Command::Branch(condition, label) => {
+                                match useflags_line {
+                                    Some(useflags_line) => {
+                                        match code.wait_for_flags(useflags_line) {
+                                            Some(delay) => {
+                                                for _ in 0..delay {
+                                                    code.push(0);
+                                                }
+                                            }
+                                            None => {
+                                                match {
+                                                    match code.delayed_flags_for_branch() {
+                                                        FlagsSetBy::Unreachable => {
+                                                            Err(format!("Is unreachable"))
+                                                        }
+                                                        FlagsSetBy::Unknown => Err(format!(
+                                                            "The flags could come from an unknown source"
+                                                        )),
+                                                        FlagsSetBy::Nibble(branch_line) => {
+                                                            if useflags_line != branch_line {
+                                                                Err(format!(
+                                                                "Actually uses flags from {branch_line}",
+                                                            ))
+                                                            } else {
+                                                                Ok(())
+                                                            }
+                                                        }
+                                                    }
+                                                } {
+                                                    Ok(()) => {}
+                                                    Err(err) => {
+                                                        panic!("BRANCH wants to use flags from .USEFLAGS {useflags_line} but: {err}");
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        //TODO: should this cause an error?
+                                    }
+                                }
                                 code.push(3);
                                 code.push(match condition {
                                     crate::assembly::Condition::InputReady => 0,
@@ -329,6 +425,7 @@ impl Program {
                                     crate::assembly::Condition::LessEqual => 15,
                                 });
                                 code.label_target(label);
+                                code.flush_flags();
                             }
                             crate::assembly::Command::Push(nibble) => {
                                 code.push(4);
@@ -353,17 +450,19 @@ impl Program {
                                         PageIdent::Ram(ident) => {
                                             code.push(1);
                                             code.ram_addr(ident);
-
                                             code.push(13);
                                             code.label_target(label);
                                         }
                                     }
                                 }
+                                code.unknown_flags();
                             }
                             crate::assembly::Command::Return => {
                                 code.push(7);
+                                code.unreachable_flags();
                             }
                             crate::assembly::Command::Add(nibble) => {
+                                code.set_flags();
                                 code.push(8);
                                 code.push(nibble.as_u8());
                             }
@@ -377,6 +476,7 @@ impl Program {
                                 code.push(0);
                             }
                             crate::assembly::Command::Not => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(1);
                             }
@@ -389,50 +489,62 @@ impl Program {
                                 code.push(3);
                             }
                             crate::assembly::Command::Increment => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(4);
                             }
                             crate::assembly::Command::IncrementWithCarry => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(5);
                             }
                             crate::assembly::Command::Decrement => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(6);
                             }
                             crate::assembly::Command::DecrementWithCarry => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(7);
                             }
                             crate::assembly::Command::Negate => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(8);
                             }
                             crate::assembly::Command::NegateWithCarry => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(9);
                             }
                             crate::assembly::Command::NoopSetFlags => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(10);
                             }
                             crate::assembly::Command::PopSetFlags => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(11);
                             }
                             crate::assembly::Command::RightShift => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(12);
                             }
                             crate::assembly::Command::RightShiftCarryIn => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(13);
                             }
                             crate::assembly::Command::RightShiftOneIn => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(14);
                             }
                             crate::assembly::Command::ArithmeticRightShift => {
+                                code.set_flags();
                                 code.push(10);
                                 code.push(15);
                             }
@@ -442,6 +554,7 @@ impl Program {
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::Sub(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(1);
                                 code.push(nibble.as_u8());
@@ -457,70 +570,84 @@ impl Program {
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::And(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(4);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::Nand(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(5);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::Or(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(6);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::Nor(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(7);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::Xor(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(8);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::NXor(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(9);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::RegToFlags(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(10);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::Compare(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(11);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::SwapAdd(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(12);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::SwapSub(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(13);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::AddWithCarry(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(14);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::SubWithCarry(nibble) => {
+                                code.set_flags();
                                 code.push(11);
                                 code.push(15);
                                 code.push(nibble.as_u8());
                             }
                             crate::assembly::Command::RawRamCall => {
                                 code.push(13);
+                                code.unknown_flags();
                             }
                             crate::assembly::Command::Input => {
                                 code.push(14);
+                                code.unknown_flags(); //Not sure what happens here
                             }
                             crate::assembly::Command::Output(vec) => {
                                 code.push(15);
@@ -536,6 +663,8 @@ impl Program {
                                         },
                                     );
                                 }
+                                // Because the output instruction may pause if the output is blocked, we don't know what the flags will be
+                                code.unknown_flags();
                             }
                         },
                         Line::Meta(meta) => match meta {
@@ -544,8 +673,18 @@ impl Program {
                             Meta::RamPage => unreachable!(),
                             Meta::Label(label) => {
                                 code.label_location(label);
+                                // Because we could jump to here from somewhere else
+                                code.unknown_flags();
                             }
-                            Meta::UseFlags => todo!(),
+                            Meta::UseFlags => match code.flags_as_set {
+                                FlagsSetBy::Unreachable => panic!(".USEFLAGS is unreachable"),
+                                FlagsSetBy::Unknown => {
+                                    panic!(".USEFLAGS has unknown origin for flag")
+                                }
+                                FlagsSetBy::Nibble(n) => {
+                                    useflags_line = Some(n);
+                                }
+                            },
                             Meta::Comment => {}
                         },
                     }
