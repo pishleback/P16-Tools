@@ -54,12 +54,19 @@ def make_torch_rom_page(schem, ox, oy, oz, page):
         q, r = divmod(i, 32)
         set_nibble(ox - 8 * q, oy, oz - 2 * r, n)
 
+def make_barrel_rom_page(schem, ox, oy, oz, page):
+    for a in range(8):
+        for d in range(32):
+            place_barrel_or_glass(schem, ox - 2 * d, oy - 2 * a, oz, page[d + 32 * a])
+
 
 def make_rom_schem(schem, memory, rom_page):
     assert(type(rom_page) == int)
     assert(0 <= rom_page < 16)
     if rom_page in {1, 2, 3}:
         make_torch_rom_page(schem, -5, -10 - 5 * (rom_page - 1), -5, memory["rom"][rom_page])
+    elif rom_page in {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}:
+        make_barrel_rom_page(schem, -13, -11 - (16 if rom_page % 2 == 0 else 0), 13 + 4 * ((rom_page - 4) // 2), memory["rom"][rom_page])
     else:
         raise NotImplementedError()
 
@@ -71,6 +78,17 @@ schem = mcschematic.MCSchematic()
 make_rom_schem(schem, memory, 1)
 make_rom_schem(schem, memory, 2)
 make_rom_schem(schem, memory, 3)
-place_barrel(schem, 0, 0, 0, 7)
+make_rom_schem(schem, memory, 4)
+make_rom_schem(schem, memory, 5)
+make_rom_schem(schem, memory, 6)
+make_rom_schem(schem, memory, 7)
+make_rom_schem(schem, memory, 8)
+make_rom_schem(schem, memory, 9)
+make_rom_schem(schem, memory, 10)
+make_rom_schem(schem, memory, 11)
+make_rom_schem(schem, memory, 12)
+make_rom_schem(schem, memory, 13)
+make_rom_schem(schem, memory, 14)
+make_rom_schem(schem, memory, 15)
 
 schem.save("..", "memory", mcschematic.Version.JE_1_18_2)

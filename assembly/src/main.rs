@@ -96,10 +96,15 @@ fn main() {
 
     let source = "\
 ..ROM 0
-CALL run
+CALL flub
 RETURN
 
 ..ROM 1
+.LABEL flub
+CALL run
+RETURN
+
+..ROM 5
 .LABEL run
 VALUE 1
 DUP
