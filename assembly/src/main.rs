@@ -94,30 +94,60 @@ impl Nibble {
 fn main() {
     // std::env::set_var("RUST_BACKTRACE", "1");
 
-    let source = "\
+    let source = r#"
 ..ROM 0
-CALL flub
+CALL start
 RETURN
 
 ..ROM 1
-.LABEL flub
-CALL run
+.LABEL start
+INPUT
+INPUT
+CALL mul
+POP %0
+POP %1
 RETURN
 
-..ROM 5
-.LABEL run
-VALUE 1
-DUP
+.LABEL mul
 POP %0
-.LABEL loop
-DUP
-OUTPUT 1.0
-SADD %0
+CMP %0
 .USEFLAGS
-BRANCH C end
+VALUE 0
+DUP 
+DUP
+POP %1
+POP %2
+POP %3
+BRANCH LO skipswap
+SWAP %0
+.LABEL skipswap
+.LABEL loop
+RSH
+.USEFLAGS
+BRANCH !C skipadd
+PUSH %2
+ADD %0
+POP %2
+PUSH %3
+CADD %1
+POP %3
+.LABEL skipadd
+KSETF
+.USEFLAGS
+PUSH %0
+ADD %0
+POP %0
+BRANCH Z end
+PUSH %1
+CADD %1
+POP %1
 JUMP loop
 .LABEL end
-RETURN";
+PSETF
+PUSH %3
+PUSH %2
+RETURN
+"#;
     println!("===Source===");
     println!("{source}");
     println!();
@@ -139,14 +169,14 @@ RETURN";
     }));
     let input = sim.input();
     std::thread::spawn(move || {
-        sleep(Duration::from_millis(1000));
-        input.lock().unwrap().push(3);
-        sleep(Duration::from_millis(1000));
+        sleep(Duration::from_millis(100));
+        input.lock().unwrap().push(8);
+        sleep(Duration::from_millis(100));
         input.lock().unwrap().push(5);
     });
 
     println!("===Execute===");
-    println!("{:?}", sim.run(false, false));
+    println!("{:?}", sim.run(true, true));
 
     // println!("{:?}", result);
 
