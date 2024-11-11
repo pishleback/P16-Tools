@@ -4,7 +4,7 @@ use std::str::FromStr;
 grammar;
 
 Label: Label = {
-    <label:r"[a-z|_]+"> => Label::new(String::from(label)).unwrap(),
+    <label:r"[a-z|_][a-z|_|0-9]+"> => Label::new(String::from(label)).unwrap(),
 }
 
 NibbleNum: Nibble = {

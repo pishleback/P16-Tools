@@ -405,6 +405,7 @@ impl Program {
                                         //TODO: should this cause an error?
                                     }
                                 }
+                                useflags_line = None;
                                 code.push(3);
                                 code.push(match condition {
                                     crate::assembly::Condition::InputReady => 0,
