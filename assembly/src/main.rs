@@ -102,10 +102,18 @@ RETURN
 ..ROM 1
 .LABEL start
 INPUT
+DUP
+OUTPUT 0.0
 INPUT
+DUP
+OUTPUT 0.1
 CALL mul
 POP %0
 POP %1
+PUSH %0
+OUTPUT 0.2
+PUSH %1
+OUTPUT 0.3
 RETURN
 
 .LABEL mul
@@ -182,3 +190,5 @@ RETURN
 
     // nibblecode::do_shit();
 }
+
+
