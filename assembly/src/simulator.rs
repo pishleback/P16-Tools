@@ -24,7 +24,7 @@ impl ProgramMemory {
                 let nibble_block = self
                     .ram()
                     .get_value(addr.wrapping_add((ptr.counter / 4) as u16));
-                let nibble_idx = ptr.counter % 4;
+                let nibble_idx = 3 - ptr.counter % 4;
                 Nibble::new(((nibble_block >> (nibble_idx * 4)) & 15u16) as u8).unwrap()
             }
         }
