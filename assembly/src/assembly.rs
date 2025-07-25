@@ -1,8 +1,7 @@
 use lalrpop_util::lalrpop_mod;
-
 lalrpop_mod!(assembly_grammar);
 
-use super::{Nibble, OctDigit};
+use crate::datatypes::{Nibble, OctDigit};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Label {

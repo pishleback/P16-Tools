@@ -1,53 +1,4 @@
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct Nibble {
-    n: u8, // Use least sig 4 bits
-}
-impl Nibble {
-    pub fn new(n: u8) -> Self {
-        debug_assert!(n < 16);
-        Self { n }
-    }
-    pub fn as_u8(&self) -> u8 {
-        self.n
-    }
-    pub fn as_u16(&self) -> u16 {
-        self.n as u16
-    }
-    pub fn as_u32(&self) -> u32 {
-        self.n as u32
-    }
-    pub fn as_usize(&self) -> usize {
-        self.n as usize
-    }
-    pub fn as_enum(&self) -> super::Nibble {
-        match self.n {
-            0 => super::Nibble::N0,
-            1 => super::Nibble::N1,
-            2 => super::Nibble::N2,
-            3 => super::Nibble::N3,
-            4 => super::Nibble::N4,
-            5 => super::Nibble::N5,
-            6 => super::Nibble::N6,
-            7 => super::Nibble::N7,
-            8 => super::Nibble::N8,
-            9 => super::Nibble::N9,
-            10 => super::Nibble::N10,
-            11 => super::Nibble::N11,
-            12 => super::Nibble::N12,
-            13 => super::Nibble::N13,
-            14 => super::Nibble::N14,
-            15 => super::Nibble::N15,
-            _ => {
-                unreachable!()
-            }
-        }
-    }
-    pub fn hex_str(&self) -> &'static str {
-        [
-            "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F",
-        ][self.n as usize]
-    }
-}
+use crate::datatypes::Nibble;
 
 #[derive(Debug, Clone)]
 pub struct RomPage {
@@ -56,7 +7,7 @@ pub struct RomPage {
 impl RomPage {
     fn zeros() -> Self {
         Self {
-            data: core::array::from_fn(|_i| Nibble::new(0)),
+            data: core::array::from_fn(|_i| Nibble::N0),
         }
     }
     pub fn get_nibble(&self, ptr: u8) -> Nibble {
@@ -100,25 +51,30 @@ impl ProgramMemory {
                     .iter()
                     .map(|page| {
                         serde_json::Value::Array(
-                            page.data
-                                .iter()
-                                .map(|n| serde_json::Value::Number(n.as_u8().into()))
-                                .collect(),
+                            if let Some(i) = page.data.iter().rposition(|&x| x != Nibble::N0) {
+                                page.data[0..=i]
+                                    .iter()
+                                    .map(|n| serde_json::Value::Number(n.as_u8().into()))
+                                    .collect()
+                            } else {
+                                [].to_vec()
+                            },
                         )
                     })
                     .collect(),
             ),
         );
-        json.insert(
-            "ram".to_string(),
-            serde_json::Value::Array(
-                self.ram
-                    .data
-                    .iter()
-                    .map(|v| serde_json::Value::Number((*v).into()))
-                    .collect(),
-            ),
-        );
+        if let Some(i) = self.ram.data.iter().rposition(|&x| x != 0) {
+            json.insert(
+                "ram".to_string(),
+                serde_json::Value::Array(
+                    self.ram.data[0..=i]
+                        .iter()
+                        .map(|v| serde_json::Value::Number((*v).into()))
+                        .collect(),
+                ),
+            );
+        }
         serde_json::Value::Object(json)
     }
 
@@ -130,10 +86,10 @@ impl ProgramMemory {
             ram: RamMem {
                 data: core::array::from_fn(|i| {
                     let j = 4 * i;
-                    ram[j].as_u16()
-                        | (ram[j + 1].as_u16() << 4)
-                        | (ram[j + 2].as_u16() << 8)
-                        | (ram[j + 3].as_u16() << 12)
+                    ram[j + 3].as_u16()
+                        | (ram[j + 2].as_u16() << 4)
+                        | (ram[j + 1].as_u16() << 8)
+                        | (ram[j].as_u16() << 12)
                 }),
             },
         }
@@ -151,7 +107,7 @@ impl ProgramMemory {
             loop {
                 match vals.last() {
                     Some(n) => {
-                        if *n == Nibble::new(0) {
+                        if *n == Nibble::N0 {
                             vals.pop().unwrap();
                             continue;
                         } else {
@@ -164,7 +120,7 @@ impl ProgramMemory {
                 }
             }
 
-            print!("ROM {}: ", Nibble::new(n as u8).hex_str());
+            print!("ROM {}: ", Nibble::new(n as u8).unwrap().hex_str());
             for x in &vals {
                 print!("{}", x.hex_str());
             }
@@ -177,10 +133,10 @@ impl ProgramMemory {
             .iter()
             .flat_map(|v| {
                 vec![
-                    Nibble::new((v & 15) as u8),
-                    Nibble::new(((v >> 4) & 15) as u8),
-                    Nibble::new(((v >> 8) & 15) as u8),
-                    Nibble::new(((v >> 12) & 15) as u8),
+                    Nibble::new((v & 15) as u8).unwrap(),
+                    Nibble::new(((v >> 4) & 15) as u8).unwrap(),
+                    Nibble::new(((v >> 8) & 15) as u8).unwrap(),
+                    Nibble::new(((v >> 12) & 15) as u8).unwrap(),
                 ]
             })
             .collect();
@@ -188,7 +144,7 @@ impl ProgramMemory {
             loop {
                 match vals.last() {
                     Some(n) => {
-                        if *n == Nibble::new(0) {
+                        if *n == Nibble::N0 {
                             vals.pop().unwrap();
                             continue;
                         } else {

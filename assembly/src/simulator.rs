@@ -1,13 +1,10 @@
+use crate::datatypes::{Nibble, OctDigit};
+use crate::memory::ProgramMemory;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
     thread::sleep,
     time::Duration,
-};
-
-use crate::{
-    memory::{Nibble, ProgramMemory},
-    OctDigit,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -28,7 +25,7 @@ impl ProgramMemory {
                     .ram()
                     .get_value(addr.wrapping_add((ptr.counter / 4) as u16));
                 let nibble_idx = ptr.counter % 4;
-                Nibble::new(((nibble_block >> (nibble_idx * 4)) & 15u16) as u8)
+                Nibble::new(((nibble_block >> (nibble_idx * 4)) & 15u16) as u8).unwrap()
             }
         }
     }
@@ -103,7 +100,7 @@ impl Simulator {
             memory,
             program_counter: ProgramPtr {
                 page: ProgramPagePtr::Rom {
-                    page: Nibble::new(0),
+                    page: Nibble::N0,
                 },
                 counter: 0,
             },
@@ -199,14 +196,14 @@ impl Simulator {
 
     fn step(&mut self, log_instructions: bool) -> Result<EndStepOkState, EndErrorState> {
         let opcode = self.memory.read(&self.program_counter);
-        match opcode.as_enum() {
-            crate::Nibble::N0 => {
+        match opcode {
+            Nibble::N0 => {
                 if log_instructions {
                     println!("Pass");
                 }
                 self.increment();
             }
-            crate::Nibble::N1 => {
+            Nibble::N1 => {
                 if log_instructions {
                     println!("Value");
                 }
@@ -225,7 +222,7 @@ impl Simulator {
                     | n3.as_u16().wrapping_shl(12);
                 self.push_data_stack(value)?;
             }
-            crate::Nibble::N2 => {
+            Nibble::N2 => {
                 if log_instructions {
                     println!("Jump");
                 }
@@ -237,7 +234,7 @@ impl Simulator {
                 self.program_counter.counter = addr;
                 self.flush_flag_delay();
             }
-            crate::Nibble::N3 => {
+            Nibble::N3 => {
                 if log_instructions {
                     println!("Branch");
                 }
@@ -250,29 +247,29 @@ impl Simulator {
                 let a0 = self.memory.read(&self.program_counter);
                 self.increment();
                 let addr = a0.as_u8() | a1.as_u8().wrapping_shl(4);
-                if match cond.as_enum() {
-                    crate::Nibble::N0 => todo!(),
-                    crate::Nibble::N1 => todo!(),
-                    crate::Nibble::N2 => f.zero,
-                    crate::Nibble::N3 => !f.zero,
-                    crate::Nibble::N4 => f.negative,
-                    crate::Nibble::N5 => !f.negative,
-                    crate::Nibble::N6 => f.overflow,
-                    crate::Nibble::N7 => !f.overflow,
-                    crate::Nibble::N8 => f.carry,
-                    crate::Nibble::N9 => !f.carry,
-                    crate::Nibble::N10 => f.carry && !f.zero,
-                    crate::Nibble::N11 => !f.carry || f.zero,
-                    crate::Nibble::N12 => f.negative == f.overflow,
-                    crate::Nibble::N13 => f.negative != f.overflow,
-                    crate::Nibble::N14 => f.negative == f.overflow && !f.zero,
-                    crate::Nibble::N15 => f.negative != f.overflow || f.zero,
+                if match cond {
+                    Nibble::N0 => todo!(),
+                    Nibble::N1 => todo!(),
+                    Nibble::N2 => f.zero,
+                    Nibble::N3 => !f.zero,
+                    Nibble::N4 => f.negative,
+                    Nibble::N5 => !f.negative,
+                    Nibble::N6 => f.overflow,
+                    Nibble::N7 => !f.overflow,
+                    Nibble::N8 => f.carry,
+                    Nibble::N9 => !f.carry,
+                    Nibble::N10 => f.carry && !f.zero,
+                    Nibble::N11 => !f.carry || f.zero,
+                    Nibble::N12 => f.negative == f.overflow,
+                    Nibble::N13 => f.negative != f.overflow,
+                    Nibble::N14 => f.negative == f.overflow && !f.zero,
+                    Nibble::N15 => f.negative != f.overflow || f.zero,
                 } {
                     self.program_counter.counter = addr;
                 }
                 self.flush_flag_delay(); //Branch pauses long enough whether or not the branch was taken
             }
-            crate::Nibble::N4 => {
+            Nibble::N4 => {
                 if log_instructions {
                     println!("Push");
                 }
@@ -282,7 +279,7 @@ impl Simulator {
                 let value = *self.get_reg_mut(reg);
                 self.push_data_stack(value)?;
             }
-            crate::Nibble::N5 => {
+            Nibble::N5 => {
                 if log_instructions {
                     println!("Pop");
                 }
@@ -291,7 +288,7 @@ impl Simulator {
                 self.increment();
                 *self.get_reg_mut(reg) = self.pop_data_stack();
             }
-            crate::Nibble::N6 => {
+            Nibble::N6 => {
                 if log_instructions {
                     println!("Call");
                 }
@@ -308,7 +305,7 @@ impl Simulator {
                 };
                 self.flush_flag_delay();
             }
-            crate::Nibble::N7 => {
+            Nibble::N7 => {
                 if log_instructions {
                     println!("Return");
                 }
@@ -321,7 +318,7 @@ impl Simulator {
                     }
                 }
             }
-            crate::Nibble::N8 => {
+            Nibble::N8 => {
                 if log_instructions {
                     println!("Add");
                 }
@@ -334,7 +331,7 @@ impl Simulator {
                 self.push_data_stack(s)?;
                 self.flags = flags;
             }
-            crate::Nibble::N9 => {
+            Nibble::N9 => {
                 if log_instructions {
                     println!("Rotate");
                 }
@@ -346,15 +343,15 @@ impl Simulator {
                 let reg = self.get_reg_mut(reg);
                 *reg = reg.rotate_left(shift.as_u32());
             }
-            crate::Nibble::N10 => {
+            Nibble::N10 => {
                 if log_instructions {
                     print!("Alm1: ");
                 }
                 self.increment();
                 let op = self.memory.read(&self.program_counter);
                 self.increment();
-                match op.as_enum() {
-                    crate::Nibble::N0 => {
+                match op {
+                    Nibble::N0 => {
                         if log_instructions {
                             println!("Duplicate");
                         }
@@ -362,7 +359,7 @@ impl Simulator {
                         self.push_data_stack(x).unwrap();
                         self.push_data_stack(x)?;
                     }
-                    crate::Nibble::N1 => {
+                    Nibble::N1 => {
                         if log_instructions {
                             println!("Not");
                         }
@@ -371,9 +368,9 @@ impl Simulator {
                         self.set_flags(noop_get_flags(y), 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N2 => todo!(),
-                    crate::Nibble::N3 => todo!(),
-                    crate::Nibble::N4 => {
+                    Nibble::N2 => todo!(),
+                    Nibble::N3 => todo!(),
+                    Nibble::N4 => {
                         if log_instructions {
                             println!("Increment");
                         }
@@ -382,7 +379,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N5 => {
+                    Nibble::N5 => {
                         if log_instructions {
                             println!("Increment With Carry");
                         }
@@ -391,7 +388,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N6 => {
+                    Nibble::N6 => {
                         if log_instructions {
                             println!("Decrement");
                         }
@@ -400,7 +397,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N7 => {
+                    Nibble::N7 => {
                         if log_instructions {
                             println!("Decrement With Carry");
                         }
@@ -409,7 +406,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N8 => {
+                    Nibble::N8 => {
                         if log_instructions {
                             println!("Negate");
                         }
@@ -418,7 +415,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N9 => {
+                    Nibble::N9 => {
                         if log_instructions {
                             println!("Negate With Carry");
                         }
@@ -427,7 +424,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N10 => {
+                    Nibble::N10 => {
                         if log_instructions {
                             println!("Set Flags Without Pop");
                         }
@@ -435,14 +432,14 @@ impl Simulator {
                         self.set_flags(noop_get_flags(x), 2);
                         self.push_data_stack(x).unwrap();
                     }
-                    crate::Nibble::N11 => {
+                    Nibble::N11 => {
                         if log_instructions {
                             println!("Set Flags With Pop");
                         }
                         let x = self.pop_data_stack();
                         self.set_flags(noop_get_flags(x), 2);
                     }
-                    crate::Nibble::N12 => {
+                    Nibble::N12 => {
                         if log_instructions {
                             println!("Right Shift");
                         }
@@ -453,7 +450,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N13 => {
+                    Nibble::N13 => {
                         if log_instructions {
                             println!("Right Shift With Carry");
                         }
@@ -472,7 +469,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N14 => {
+                    Nibble::N14 => {
                         if log_instructions {
                             println!("Right Shift Carry In");
                         }
@@ -483,7 +480,7 @@ impl Simulator {
                         self.set_flags(f, 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N15 => {
+                    Nibble::N15 => {
                         if log_instructions {
                             println!("Arithmetic Right Shift");
                         }
@@ -504,7 +501,7 @@ impl Simulator {
                     }
                 }
             }
-            crate::Nibble::N11 => {
+            Nibble::N11 => {
                 if log_instructions {
                     print!("Alm2: ");
                 }
@@ -514,8 +511,8 @@ impl Simulator {
                 let reg = self.memory.read(&self.program_counter);
                 self.increment();
                 let r = *self.get_reg_mut(reg);
-                match op.as_enum() {
-                    crate::Nibble::N0 => {
+                match op {
+                    Nibble::N0 => {
                         if log_instructions {
                             println!("Swap");
                         }
@@ -523,7 +520,7 @@ impl Simulator {
                         *self.get_reg_mut(reg) = x;
                         self.push_data_stack(r).unwrap();
                     }
-                    crate::Nibble::N1 => {
+                    Nibble::N1 => {
                         if log_instructions {
                             println!("Subtract");
                         }
@@ -532,9 +529,9 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N2 => todo!(),
-                    crate::Nibble::N3 => todo!(),
-                    crate::Nibble::N4 => {
+                    Nibble::N2 => todo!(),
+                    Nibble::N3 => todo!(),
+                    Nibble::N4 => {
                         if log_instructions {
                             println!("And");
                         }
@@ -544,7 +541,7 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N5 => {
+                    Nibble::N5 => {
                         if log_instructions {
                             println!("NAnd");
                         }
@@ -554,7 +551,7 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N6 => {
+                    Nibble::N6 => {
                         if log_instructions {
                             println!("Or");
                         }
@@ -564,7 +561,7 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N7 => {
+                    Nibble::N7 => {
                         if log_instructions {
                             println!("NOr");
                         }
@@ -574,7 +571,7 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N8 => {
+                    Nibble::N8 => {
                         if log_instructions {
                             println!("Xor");
                         }
@@ -584,7 +581,7 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N9 => {
+                    Nibble::N9 => {
                         if log_instructions {
                             println!("NXor");
                         }
@@ -594,14 +591,14 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N10 => {
+                    Nibble::N10 => {
                         if log_instructions {
                             println!("Set Flags");
                         }
                         let f = noop_get_flags(r);
                         self.set_flags(f, 3);
                     }
-                    crate::Nibble::N11 => {
+                    Nibble::N11 => {
                         if log_instructions {
                             println!("Compare");
                         }
@@ -610,7 +607,7 @@ impl Simulator {
                         let (_y, f) = add_with_flags(x, !r, true);
                         self.set_flags(f, 3);
                     }
-                    crate::Nibble::N12 => {
+                    Nibble::N12 => {
                         if log_instructions {
                             println!("Swap Add");
                         }
@@ -620,7 +617,7 @@ impl Simulator {
                         *self.get_reg_mut(reg) = x;
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N13 => {
+                    Nibble::N13 => {
                         if log_instructions {
                             println!("Swap Sub");
                         }
@@ -630,7 +627,7 @@ impl Simulator {
                         *self.get_reg_mut(reg) = x;
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N14 => {
+                    Nibble::N14 => {
                         if log_instructions {
                             println!("Add With Carry");
                         }
@@ -639,7 +636,7 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    crate::Nibble::N15 => {
+                    Nibble::N15 => {
                         if log_instructions {
                             println!("Subtract With Carry");
                         }
@@ -650,7 +647,7 @@ impl Simulator {
                     }
                 }
             }
-            crate::Nibble::N12 => {
+            Nibble::N12 => {
                 if log_instructions {
                     println!("RomCall");
                 }
@@ -668,7 +665,7 @@ impl Simulator {
                 };
                 self.flush_flag_delay();
             }
-            crate::Nibble::N13 => {
+            Nibble::N13 => {
                 if log_instructions {
                     println!("RamCall");
                 }
@@ -685,7 +682,7 @@ impl Simulator {
                 };
                 self.flush_flag_delay();
             }
-            crate::Nibble::N14 => {
+            Nibble::N14 => {
                 if log_instructions {
                     println!("Input");
                 }
@@ -703,7 +700,7 @@ impl Simulator {
                     }
                 }
             }
-            crate::Nibble::N15 => {
+            Nibble::N15 => {
                 if log_instructions {
                     println!("Output");
                 }

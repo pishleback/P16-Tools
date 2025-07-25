@@ -3,13 +3,13 @@ use std::{
     hash::Hash,
 };
 
-use super::Nibble;
+use crate::datatypes::Nibble;
 use crate::assembly::{Assembly, Label, Line, Meta};
 
 #[derive(Debug)]
 struct Memory {
-    rom_pages: [[Option<super::memory::Nibble>; 256]; 16],
-    ram: [Option<super::memory::Nibble>; 1 << (12 + 2)],
+    rom_pages: [[Option<Nibble>; 256]; 16],
+    ram: [Option<Nibble>; 1 << (12 + 2)],
 }
 impl Memory {
     fn blank() -> Self {
@@ -19,7 +19,7 @@ impl Memory {
         }
     }
 
-    fn set_nibble(&mut self, ptr: MemNibblePtr, n: super::memory::Nibble) -> Result<(), ()> {
+    fn set_nibble(&mut self, ptr: MemNibblePtr, n: Nibble) -> Result<(), ()> {
         match ptr {
             MemNibblePtr::Rom(nibble, addr) => {
                 let entry = &mut self.rom_pages[nibble.as_usize()][addr as usize];
@@ -48,10 +48,10 @@ impl Memory {
         super::memory::ProgramMemory::new(
             core::array::from_fn(|i| {
                 core::array::from_fn(|j| {
-                    self.rom_pages[i][j].unwrap_or(super::memory::Nibble::new(0))
+                    self.rom_pages[i][j].unwrap_or(Nibble::N0)
                 })
             }),
-            core::array::from_fn(|i| self.ram[i].unwrap_or(super::memory::Nibble::new(0))),
+            core::array::from_fn(|i| self.ram[i].unwrap_or(Nibble::N0)),
         )
     }
 }
@@ -135,13 +135,13 @@ impl MemoryManager {
             self.memory
                 .set_nibble(
                     page.nibble_ptr(*blank_ptr),
-                    super::memory::Nibble::new((target_ptr >> 4) & 15),
+                    Nibble::new((target_ptr >> 4) & 15).unwrap(),
                 )
                 .unwrap();
             self.memory
                 .set_nibble(
                     page.nibble_ptr(*blank_ptr + 1),
-                    super::memory::Nibble::new(target_ptr & 15),
+                    Nibble::new(target_ptr & 15).unwrap(),
                 )
                 .unwrap();
         }
@@ -151,25 +151,25 @@ impl MemoryManager {
             self.memory
                 .set_nibble(
                     blank_page.nibble_ptr(*blank_ptr + 3),
-                    super::memory::Nibble::new((addr & 15) as u8),
+                    Nibble::new((addr & 15) as u8).unwrap(),
                 )
                 .unwrap();
             self.memory
                 .set_nibble(
                     blank_page.nibble_ptr(*blank_ptr + 2),
-                    super::memory::Nibble::new(((addr >> 4) & 15) as u8),
+                    Nibble::new(((addr >> 4) & 15) as u8).unwrap(),
                 )
                 .unwrap();
             self.memory
                 .set_nibble(
                     blank_page.nibble_ptr(*blank_ptr + 1),
-                    super::memory::Nibble::new(((addr >> 8) & 15) as u8),
+                    Nibble::new(((addr >> 8) & 15) as u8).unwrap(),
                 )
                 .unwrap();
             self.memory
                 .set_nibble(
                     blank_page.nibble_ptr(*blank_ptr),
-                    super::memory::Nibble::new(((addr >> 12) & 15) as u8),
+                    Nibble::new(((addr >> 12) & 15) as u8).unwrap(),
                 )
                 .unwrap();
         }
@@ -257,7 +257,7 @@ impl<'a> MemoryPageManager<'a> {
     fn push(&mut self, n: u8) {
         self.memory_manager
             .memory
-            .set_nibble(self.nibble_ptr(), super::memory::Nibble::new(n))
+            .set_nibble(self.nibble_ptr(), Nibble::new(n).unwrap())
             .unwrap();
         self.inc()
     }
