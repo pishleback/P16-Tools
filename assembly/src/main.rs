@@ -1,5 +1,7 @@
 use std::{thread::sleep, time::Duration};
 
+use crate::assembly::load_assembly;
+
 pub mod assembly;
 pub mod compile;
 pub mod memory;
@@ -160,10 +162,10 @@ RETURN
     println!("{source}");
     println!();
 
-    let result = assembly::assembly_grammar::ProgramParser::new().parse(source);
-    let result = result.unwrap();
+    let assembly = load_assembly(source);
 
-    let mem = result.compile();
+    let mem = assembly.compile();
+
     println!("===Memory===");
     mem.pprint();
     println!();
@@ -173,7 +175,7 @@ RETURN
 
     let mut sim = mem.simulator();
     sim.subscribe_to_output(Box::new(|addr, value| {
-        println!("{:?} {:?}", addr, value);
+        println!("{addr:?} {value:?}");
     }));
     let input = sim.input();
     std::thread::spawn(move || {
@@ -190,5 +192,3 @@ RETURN
 
     // nibblecode::do_shit();
 }
-
-

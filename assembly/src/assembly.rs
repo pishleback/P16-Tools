@@ -1,6 +1,6 @@
 use lalrpop_util::lalrpop_mod;
 
-lalrpop_mod!(pub assembly_grammar);
+lalrpop_mod!(assembly_grammar);
 
 use super::{Nibble, OctDigit};
 
@@ -108,15 +108,21 @@ pub enum Line {
 }
 
 #[derive(Debug, Clone)]
-pub struct Program {
+pub struct Assembly {
     lines: Vec<Line>,
 }
 
-impl Program {
+impl Assembly {
     pub fn lines(&self) -> &Vec<Line> {
         &self.lines
     }
     fn new(lines: Vec<Line>) -> Self {
         Self { lines }
     }
+}
+
+pub fn load_assembly(source: &str) -> Assembly {
+    assembly_grammar::AssemblyParser::new()
+        .parse(source)
+        .unwrap()
 }

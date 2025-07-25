@@ -171,8 +171,8 @@ Line: Line = {
     ".COMMENT" <c:r#""[0-9|a-z|A-Z|\s|']*""#> => Line::Meta(Meta::Comment),
 };
 
-pub Program: Program = {
-    <lines:Concat<Line>> => Program::new(lines),
+pub Assembly: Assembly = {
+    <lines:Concat<Line>> => Assembly::new(lines),
 }
 
 Concat<T>: Vec<T> = {

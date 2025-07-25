@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::Nibble;
-use crate::assembly::{Label, Line, Meta, Program};
+use crate::assembly::{Assembly, Label, Line, Meta};
 
 #[derive(Debug)]
 struct Memory {
@@ -44,8 +44,8 @@ impl Memory {
         }
     }
 
-    fn finish(&self) -> super::memory::Memory {
-        super::memory::Memory::new(
+    fn finish(&self) -> super::memory::ProgramMemory {
+        super::memory::ProgramMemory::new(
             core::array::from_fn(|i| {
                 core::array::from_fn(|j| {
                     self.rom_pages[i][j].unwrap_or(super::memory::Nibble::new(0))
@@ -54,12 +54,6 @@ impl Memory {
             core::array::from_fn(|i| self.ram[i].unwrap_or(super::memory::Nibble::new(0))),
         )
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PageType {
-    Rom(Nibble),
-    Ram,
 }
 
 #[derive(Debug, Clone)]
@@ -86,14 +80,6 @@ impl PageLocation {
 enum PageIdent {
     Rom(Nibble),
     Ram(usize),
-}
-impl PageIdent {
-    fn as_type(self) -> PageType {
-        match self {
-            PageIdent::Rom(nibble) => PageType::Rom(nibble),
-            PageIdent::Ram(ident) => PageType::Ram,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -144,7 +130,7 @@ impl MemoryManager {
     fn finish(mut self) -> Memory {
         // Replace labels with u8 page addresses
         for (label, blank_page, blank_ptr) in &self.label_targets {
-            let (target_page, target_ptr) = self.label_values.get(&label).unwrap();
+            let (_target_page, target_ptr) = self.label_values.get(label).unwrap();
             let page = blank_page;
             self.memory
                 .set_nibble(
@@ -301,21 +287,18 @@ impl<'a> MemoryPageManager<'a> {
     }
 }
 
-impl Program {
-    pub fn compile(&self) -> super::memory::Memory {
+impl Assembly {
+    pub fn compile(&self) -> super::memory::ProgramMemory {
         let mut pages: Vec<(PageIdent, Vec<Line>)> = vec![];
         let mut label_to_page: HashMap<Label, PageIdent> = HashMap::new();
         {
             let mut ram_page_ident_counter = 0;
             for line in self.lines() {
-                match line {
-                    crate::assembly::Line::Meta(Meta::Label(label)) => {
-                        if label_to_page.contains_key(&label) {
-                            panic!("Duplicate label `{}`", label.to_string());
-                        }
-                        label_to_page.insert(label.clone(), pages.last().unwrap().0);
+                if let crate::assembly::Line::Meta(Meta::Label(label)) = line {
+                    if label_to_page.contains_key(label) {
+                        panic!("Duplicate label `{}`", label.to_string());
                     }
-                    _ => {}
+                    label_to_page.insert(label.clone(), pages.last().unwrap().0);
                 }
 
                 match line {
@@ -374,22 +357,18 @@ impl Program {
                                                 }
                                             }
                                             None => {
-                                                match {
-                                                    match code.delayed_flags_for_branch() {
-                                                        FlagsSetBy::Unreachable => {
-                                                            Err(format!("Is unreachable"))
-                                                        }
-                                                        FlagsSetBy::Unknown => Err(format!(
-                                                            "The flags could come from an unknown source"
-                                                        )),
-                                                        FlagsSetBy::Nibble(branch_line) => {
-                                                            if useflags_line != branch_line {
-                                                                Err(format!(
-                                                                "Actually uses flags from {branch_line}",
-                                                            ))
-                                                            } else {
-                                                                Ok(())
-                                                            }
+                                                match match code.delayed_flags_for_branch() {
+                                                    FlagsSetBy::Unreachable => {
+                                                        Err("Is unreachable".to_string())
+                                                    }
+                                                    FlagsSetBy::Unknown => Err("The flags could come from an unknown source".to_string()),
+                                                    FlagsSetBy::Nibble(branch_line) => {
+                                                        if useflags_line != branch_line {
+                                                            Err(format!(
+                                                            "Actually uses flags from {branch_line}",
+                                                        ))
+                                                        } else {
+                                                            Ok(())
                                                         }
                                                     }
                                                 } {

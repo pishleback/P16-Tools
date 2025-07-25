@@ -1,13 +1,12 @@
 use std::{
     collections::VecDeque,
-    default,
     sync::{Arc, Mutex},
     thread::sleep,
     time::Duration,
 };
 
 use crate::{
-    memory::{Memory, Nibble},
+    memory::{Nibble, ProgramMemory},
     OctDigit,
 };
 
@@ -16,7 +15,7 @@ pub enum EndErrorState {
     DataStackOverflow,
 }
 
-impl Memory {
+impl ProgramMemory {
     pub fn simulator(self) -> Simulator {
         Simulator::new(self)
     }
@@ -88,7 +87,7 @@ fn noop_get_flags(a: u16) -> AluFlags {
 }
 
 pub struct Simulator {
-    memory: Memory,
+    memory: ProgramMemory,
     program_counter: ProgramPtr,
     call_stack: Vec<ProgramPtr>,
     data_stack: Vec<u16>,
@@ -96,10 +95,10 @@ pub struct Simulator {
     flags_delay: VecDeque<AluFlags>,
     flags: AluFlags,
     input_queue: Arc<Mutex<InputQueue>>,
-    output_targets: Vec<Box<dyn FnMut(Vec<OctDigit>, u16) -> ()>>,
+    output_targets: Vec<Box<dyn FnMut(Vec<OctDigit>, u16)>>,
 }
 impl Simulator {
-    fn new(memory: Memory) -> Self {
+    fn new(memory: ProgramMemory) -> Self {
         Self {
             memory,
             program_counter: ProgramPtr {
@@ -156,7 +155,7 @@ impl InputQueue {
 }
 
 impl Simulator {
-    pub fn subscribe_to_output(&mut self, callback: Box<dyn FnMut(Vec<OctDigit>, u16) -> ()>) {
+    pub fn subscribe_to_output(&mut self, callback: Box<dyn FnMut(Vec<OctDigit>, u16)>) {
         self.output_targets.push(callback);
     }
 
@@ -304,7 +303,7 @@ impl Simulator {
                 let addr = a0.as_u8() | a1.as_u8().wrapping_shl(4);
                 self.call_stack.push(self.program_counter);
                 self.program_counter = ProgramPtr {
-                    page: self.program_counter.page.clone(),
+                    page: self.program_counter.page,
                     counter: addr,
                 };
                 self.flush_flag_delay();
@@ -664,7 +663,7 @@ impl Simulator {
                 self.increment();
                 self.call_stack.push(self.program_counter);
                 self.program_counter = ProgramPtr {
-                    page: ProgramPagePtr::Rom { page: page },
+                    page: ProgramPagePtr::Rom { page },
                     counter: a.as_u8() | (b.as_u8() << 4),
                 };
                 self.flush_flag_delay();
@@ -681,7 +680,7 @@ impl Simulator {
                 self.call_stack.push(self.program_counter);
                 let addr = self.pop_data_stack();
                 self.program_counter = ProgramPtr {
-                    page: ProgramPagePtr::Ram { addr: addr },
+                    page: ProgramPagePtr::Ram { addr },
                     counter: a.as_u8() | (b.as_u8() << 4),
                 };
                 self.flush_flag_delay();

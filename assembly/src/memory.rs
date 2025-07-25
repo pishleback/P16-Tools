@@ -8,7 +8,7 @@ impl Nibble {
         Self { n }
     }
     pub fn as_u8(&self) -> u8 {
-        self.n as u8
+        self.n
     }
     pub fn as_u16(&self) -> u16 {
         self.n as u16
@@ -43,7 +43,7 @@ impl Nibble {
         }
     }
     pub fn hex_str(&self) -> &'static str {
-        &[
+        [
             "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F",
         ][self.n as usize]
     }
@@ -78,11 +78,11 @@ impl RamMem {
 }
 
 #[derive(Debug, Clone)]
-pub struct Memory {
+pub struct ProgramMemory {
     rom: [RomPage; 16],
     ram: RamMem,
 }
-impl Memory {
+impl ProgramMemory {
     pub fn ram(&self) -> &RamMem {
         &self.ram
     }
@@ -94,7 +94,7 @@ impl Memory {
     pub fn to_json(&self) -> serde_json::Value {
         let mut json = serde_json::Map::new();
         json.insert(
-            format!("rom"),
+            "rom".to_string(),
             serde_json::Value::Array(
                 self.rom
                     .iter()
@@ -110,7 +110,7 @@ impl Memory {
             ),
         );
         json.insert(
-            format!("ram"),
+            "ram".to_string(),
             serde_json::Value::Array(
                 self.ram
                     .data
@@ -147,7 +147,7 @@ impl Memory {
 
     pub fn pprint(&self) {
         'ROMLOOP: for (n, rom_page) in self.rom.iter().enumerate() {
-            let mut vals: Vec<Nibble> = rom_page.data.iter().map(|n| *n).collect();
+            let mut vals: Vec<Nibble> = rom_page.data.to_vec();
             loop {
                 match vals.last() {
                     Some(n) => {
@@ -175,7 +175,7 @@ impl Memory {
             .ram
             .data
             .iter()
-            .map(|v| {
+            .flat_map(|v| {
                 vec![
                     Nibble::new((v & 15) as u8),
                     Nibble::new(((v >> 4) & 15) as u8),
@@ -183,7 +183,6 @@ impl Memory {
                     Nibble::new(((v >> 12) & 15) as u8),
                 ]
             })
-            .flatten()
             .collect();
         'RAMBLOCK: {
             loop {
