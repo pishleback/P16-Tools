@@ -1,4 +1,9 @@
 ..ROM 0
+CALL start
+RETURN
+
+..RAM
+.LABEL start
 VALUE 1
 VALUE 2
 POP %0
