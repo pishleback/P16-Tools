@@ -23,8 +23,13 @@ impl RamMem {
     fn zeros() -> Self {
         Self { data: [0; 4096] }
     }
+
     pub fn get_value(&self, addr: u16) -> u16 {
         self.data[(addr % 4096) as usize]
+    }
+
+    pub fn set_value(&mut self, addr: u16, value: u16) {
+        self.data[(addr % 4096) as usize] = value
     }
 }
 
@@ -36,6 +41,10 @@ pub struct ProgramMemory {
 impl ProgramMemory {
     pub fn ram(&self) -> &RamMem {
         &self.ram
+    }
+
+    pub fn ram_mut(&mut self) -> &mut RamMem {
+        &mut self.ram
     }
 
     pub fn rom_page(&self, nibble: Nibble) -> &RomPage {

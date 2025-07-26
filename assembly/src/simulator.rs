@@ -29,6 +29,17 @@ impl ProgramMemory {
             }
         }
     }
+
+    fn read_page(&self, page: ProgramPagePtr) -> [Nibble; 256] {
+        let mut data = [Nibble::N0; 256];
+        let mut ptr = ProgramPtr { page, counter: 0 };
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..256 {
+            data[i] = self.read(&ptr);
+            ptr.increment();
+        }
+        data
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,50 +94,6 @@ fn noop_get_flags(a: u16) -> AluFlags {
     }
 }
 
-pub struct Simulator {
-    memory: ProgramMemory,
-    program_counter: ProgramPtr,
-    call_stack: Vec<ProgramPtr>,
-    data_stack: Vec<u16>,
-    registers: [u16; 16],
-    flags_delay: VecDeque<AluFlags>,
-    flags: AluFlags,
-    input_queue: Arc<Mutex<InputQueue>>,
-    output_targets: Vec<Box<dyn FnMut(Vec<OctDigit>, u16)>>,
-}
-impl Simulator {
-    fn new(memory: ProgramMemory) -> Self {
-        Self {
-            memory,
-            program_counter: ProgramPtr {
-                page: ProgramPagePtr::Rom { page: Nibble::N0 },
-                counter: 0,
-            },
-            call_stack: vec![],
-            data_stack: vec![],
-            registers: [0; 16],
-            flags_delay: vec![
-                AluFlags {
-                    zero: true,
-                    negative: false,
-                    carry: false,
-                    overflow: false,
-                };
-                6
-            ]
-            .into(),
-            flags: AluFlags {
-                zero: true,
-                negative: false,
-                carry: false,
-                overflow: false,
-            },
-            input_queue: Arc::new(Mutex::new(InputQueue::new())),
-            output_targets: vec![],
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 enum EndStepOkState {
     Continue,
@@ -149,7 +116,53 @@ impl InputQueue {
     }
 }
 
+pub struct Simulator {
+    memory: ProgramMemory,
+    program_counter: ProgramPtr,
+    pcache: [Nibble; 256],
+    call_stack: Vec<ProgramPtr>,
+    data_stack: Vec<u16>,
+    registers: [u16; 16],
+    flags_delay: VecDeque<AluFlags>,
+    flags: AluFlags,
+    input_queue: Arc<Mutex<InputQueue>>,
+    output_targets: Vec<Box<dyn FnMut(Vec<OctDigit>, u16)>>,
+}
 impl Simulator {
+    fn new(memory: ProgramMemory) -> Self {
+        let mut s = Self {
+            memory,
+            program_counter: ProgramPtr {
+                page: ProgramPagePtr::Rom { page: Nibble::N0 },
+                counter: 0,
+            },
+            pcache: [Nibble::N0; 256],
+            call_stack: vec![],
+            data_stack: vec![],
+            registers: [0; 16],
+            flags_delay: vec![
+                AluFlags {
+                    zero: true,
+                    negative: false,
+                    carry: false,
+                    overflow: false,
+                };
+                6
+            ]
+            .into(),
+            flags: AluFlags {
+                zero: true,
+                negative: false,
+                carry: false,
+                overflow: false,
+            },
+            input_queue: Arc::new(Mutex::new(InputQueue::new())),
+            output_targets: vec![],
+        };
+        s.load_pache();
+        s
+    }
+
     pub fn subscribe_to_output(&mut self, callback: Box<dyn FnMut(Vec<OctDigit>, u16)>) {
         self.output_targets.push(callback);
     }
@@ -178,6 +191,14 @@ impl Simulator {
         self.flags_delay.pop_front();
     }
 
+    fn load_pache(&mut self) {
+        self.pcache = self.memory.read_page(self.program_counter.page)
+    }
+
+    fn read_pcache(&self) -> Nibble {
+        self.pcache[self.program_counter.counter as usize]
+    }
+
     fn push_data_stack(&mut self, x: u16) -> Result<(), EndErrorState> {
         self.data_stack.push(x);
         // return EndErrorState::DataStackOverflow;
@@ -193,7 +214,7 @@ impl Simulator {
     }
 
     fn step(&mut self, log_instructions: bool) -> Result<EndStepOkState, EndErrorState> {
-        let opcode = self.memory.read(&self.program_counter);
+        let opcode = self.read_pcache();
         match opcode {
             Nibble::N0 => {
                 if log_instructions {
@@ -206,13 +227,13 @@ impl Simulator {
                     println!("Value");
                 }
                 self.increment();
-                let n3 = self.memory.read(&self.program_counter);
+                let n3 = self.read_pcache();
                 self.increment();
-                let n2 = self.memory.read(&self.program_counter);
+                let n2 = self.read_pcache();
                 self.increment();
-                let n1 = self.memory.read(&self.program_counter);
+                let n1 = self.read_pcache();
                 self.increment();
-                let n0 = self.memory.read(&self.program_counter);
+                let n0 = self.read_pcache();
                 self.increment();
                 let value = n0.as_u16()
                     | n1.as_u16().wrapping_shl(4)
@@ -225,9 +246,9 @@ impl Simulator {
                     println!("Jump");
                 }
                 self.increment();
-                let a1 = self.memory.read(&self.program_counter);
+                let a1 = self.read_pcache();
                 self.increment();
-                let a0 = self.memory.read(&self.program_counter);
+                let a0 = self.read_pcache();
                 let addr = a0.as_u8() | a1.as_u8().wrapping_shl(4);
                 self.program_counter.counter = addr;
                 self.flush_flag_delay();
@@ -238,11 +259,11 @@ impl Simulator {
                 }
                 let f = *self.flags_delay.front().unwrap(); // The flags to be used by the branch condition
                 self.increment();
-                let cond = self.memory.read(&self.program_counter);
+                let cond = self.read_pcache();
                 self.increment();
-                let a1 = self.memory.read(&self.program_counter);
+                let a1 = self.read_pcache();
                 self.increment();
-                let a0 = self.memory.read(&self.program_counter);
+                let a0 = self.read_pcache();
                 self.increment();
                 let addr = a0.as_u8() | a1.as_u8().wrapping_shl(4);
                 if match cond {
@@ -272,7 +293,7 @@ impl Simulator {
                     println!("Push");
                 }
                 self.increment();
-                let reg = self.memory.read(&self.program_counter);
+                let reg = self.read_pcache();
                 self.increment();
                 let value = *self.get_reg_mut(reg);
                 self.push_data_stack(value)?;
@@ -282,7 +303,7 @@ impl Simulator {
                     println!("Pop");
                 }
                 self.increment();
-                let reg = self.memory.read(&self.program_counter);
+                let reg = self.read_pcache();
                 self.increment();
                 *self.get_reg_mut(reg) = self.pop_data_stack();
             }
@@ -291,9 +312,9 @@ impl Simulator {
                     println!("Call");
                 }
                 self.increment();
-                let a1 = self.memory.read(&self.program_counter);
+                let a1 = self.read_pcache();
                 self.increment();
-                let a0 = self.memory.read(&self.program_counter);
+                let a0 = self.read_pcache();
                 self.increment();
                 let addr = a0.as_u8() | a1.as_u8().wrapping_shl(4);
                 self.call_stack.push(self.program_counter);
@@ -301,6 +322,7 @@ impl Simulator {
                     page: self.program_counter.page,
                     counter: addr,
                 };
+                self.load_pache();
                 self.flush_flag_delay();
             }
             Nibble::N7 => {
@@ -310,6 +332,7 @@ impl Simulator {
                 match self.call_stack.pop() {
                     Some(ptr) => {
                         self.program_counter = ptr;
+                        self.load_pache();
                     }
                     None => {
                         return Ok(EndStepOkState::Finish);
@@ -321,7 +344,7 @@ impl Simulator {
                     println!("Add");
                 }
                 self.increment();
-                let reg = self.memory.read(&self.program_counter);
+                let reg = self.read_pcache();
                 self.increment();
                 let acc_value = self.pop_data_stack();
                 let reg_value = *self.get_reg_mut(reg);
@@ -334,9 +357,9 @@ impl Simulator {
                     println!("Rotate");
                 }
                 self.increment();
-                let shift = self.memory.read(&self.program_counter);
+                let shift = self.read_pcache();
                 self.increment();
-                let reg = self.memory.read(&self.program_counter);
+                let reg = self.read_pcache();
                 self.increment();
                 let reg = self.get_reg_mut(reg);
                 *reg = reg.rotate_left(shift.as_u32());
@@ -346,7 +369,7 @@ impl Simulator {
                     print!("Alm1: ");
                 }
                 self.increment();
-                let op = self.memory.read(&self.program_counter);
+                let op = self.read_pcache();
                 self.increment();
                 match op {
                     Nibble::N0 => {
@@ -366,8 +389,27 @@ impl Simulator {
                         self.set_flags(noop_get_flags(y), 2);
                         self.push_data_stack(y).unwrap();
                     }
-                    Nibble::N2 => todo!(),
-                    Nibble::N3 => todo!(),
+                    Nibble::N2 => {
+                        if log_instructions {
+                            println!("Read");
+                        }
+                        let x = self.pop_data_stack();
+                        self.input()
+                            .lock()
+                            .unwrap()
+                            .push(self.memory.ram_mut().get_value(x));
+                        self.push_data_stack(x).unwrap();
+                    }
+                    Nibble::N3 => {
+                        if log_instructions {
+                            println!("Read and Pop");
+                        }
+                        let x = self.pop_data_stack();
+                        self.input()
+                            .lock()
+                            .unwrap()
+                            .push(self.memory.ram_mut().get_value(x));
+                    }
                     Nibble::N4 => {
                         if log_instructions {
                             println!("Increment");
@@ -504,9 +546,9 @@ impl Simulator {
                     print!("Alm2: ");
                 }
                 self.increment();
-                let op = self.memory.read(&self.program_counter);
+                let op = self.read_pcache();
                 self.increment();
-                let reg = self.memory.read(&self.program_counter);
+                let reg = self.read_pcache();
                 self.increment();
                 let r = *self.get_reg_mut(reg);
                 match op {
@@ -527,8 +569,21 @@ impl Simulator {
                         self.set_flags(f, 3);
                         self.push_data_stack(y).unwrap();
                     }
-                    Nibble::N2 => todo!(),
-                    Nibble::N3 => todo!(),
+                    Nibble::N2 => {
+                        if log_instructions {
+                            println!("Write");
+                        }
+                        let x = self.pop_data_stack();
+                        self.memory.ram_mut().set_value(x, r);
+                        self.push_data_stack(x).unwrap();
+                    }
+                    Nibble::N3 => {
+                        if log_instructions {
+                            println!("Write and Pop");
+                        }
+                        let x = self.pop_data_stack();
+                        self.memory.ram_mut().set_value(x, r);
+                    }
                     Nibble::N4 => {
                         if log_instructions {
                             println!("And");
@@ -650,17 +705,18 @@ impl Simulator {
                     println!("RomCall");
                 }
                 self.increment();
-                let page = self.memory.read(&self.program_counter);
+                let page = self.read_pcache();
                 self.increment();
-                let b = self.memory.read(&self.program_counter);
+                let b = self.read_pcache();
                 self.increment();
-                let a = self.memory.read(&self.program_counter);
+                let a = self.read_pcache();
                 self.increment();
                 self.call_stack.push(self.program_counter);
                 self.program_counter = ProgramPtr {
                     page: ProgramPagePtr::Rom { page },
                     counter: a.as_u8() | (b.as_u8() << 4),
                 };
+                self.load_pache();
                 self.flush_flag_delay();
             }
             Nibble::N13 => {
@@ -668,9 +724,9 @@ impl Simulator {
                     println!("RamCall");
                 }
                 self.increment();
-                let b = self.memory.read(&self.program_counter);
+                let b = self.read_pcache();
                 self.increment();
-                let a = self.memory.read(&self.program_counter);
+                let a = self.read_pcache();
                 self.increment();
                 self.call_stack.push(self.program_counter);
                 let addr = self.pop_data_stack();
@@ -678,6 +734,7 @@ impl Simulator {
                     page: ProgramPagePtr::Ram { addr },
                     counter: a.as_u8() | (b.as_u8() << 4),
                 };
+                self.load_pache();
                 self.flush_flag_delay();
             }
             Nibble::N14 => {
@@ -705,7 +762,7 @@ impl Simulator {
                 self.increment();
                 let mut octs = vec![];
                 loop {
-                    let a = self.memory.read(&self.program_counter).as_u8();
+                    let a = self.read_pcache().as_u8();
                     let oct = OctDigit::new(a & 7);
                     octs.push(oct);
                     self.increment();

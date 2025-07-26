@@ -84,8 +84,8 @@ fn main() {
             }
         });
 
-        println!("===Execute===");
         println!("{:?}", sim.run(true, true));
+
     } else if args.inputs.is_some() {
         panic!("Input sequence given for simulator but not running simulation");
     }
