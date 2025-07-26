@@ -4,9 +4,8 @@ RETURN
 
 ..ROM 1
 .LABEL start
+BRANCH !I start
+
 INPUT
-POP %5
-INPUT
-POP %6
 
 RETURN

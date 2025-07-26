@@ -99,9 +99,7 @@ impl Simulator {
         Self {
             memory,
             program_counter: ProgramPtr {
-                page: ProgramPagePtr::Rom {
-                    page: Nibble::N0,
-                },
+                page: ProgramPagePtr::Rom { page: Nibble::N0 },
                 counter: 0,
             },
             call_stack: vec![],
@@ -248,8 +246,8 @@ impl Simulator {
                 self.increment();
                 let addr = a0.as_u8() | a1.as_u8().wrapping_shl(4);
                 if match cond {
-                    Nibble::N0 => todo!(),
-                    Nibble::N1 => todo!(),
+                    Nibble::N0 => !self.input_queue.lock().unwrap().queue.is_empty(),
+                    Nibble::N1 => self.input_queue.lock().unwrap().queue.is_empty(),
                     Nibble::N2 => f.zero,
                     Nibble::N3 => !f.zero,
                     Nibble::N4 => f.negative,
