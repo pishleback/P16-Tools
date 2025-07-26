@@ -28,8 +28,29 @@ struct Args {
     /// Simulate running the program
     #[arg(short, long)]
     simulate: bool,
+
+    /// Optional comma-separated list of integers between -32768 and 65535
+    #[arg(
+        short,
+        long,
+        value_delimiter = ',',
+        num_args = 1..,
+        value_parser = clap::builder::ValueParser::new(parse_single_value)
+    )]
+    inputs: Option<Vec<u16>>,
 }
 
+fn parse_single_value(s: &str) -> Result<u16, String> {
+    let value: i32 = s
+        .parse()
+        .map_err(|e| format!("Invalid integer '{s}': {e}"))?;
+    if value < i16::MIN as i32 || value > u16::MAX as i32 {
+        return Err(format!(
+            "Value {value} is out of allowed range (-32768 to 65535)"
+        ));
+    }
+    Ok((value as u32 & 0xFFFF) as u16)
+}
 fn main() {
     let args = Args::parse();
     // std::env::set_var("RUST_BACKTRACE", "1");
@@ -52,15 +73,20 @@ fn main() {
         sim.subscribe_to_output(Box::new(|addr, value| {
             println!("{addr:?} {value:?}");
         }));
+
         let input = sim.input();
         std::thread::spawn(move || {
-            sleep(Duration::from_millis(100));
-            input.lock().unwrap().push(8);
-            sleep(Duration::from_millis(100));
-            input.lock().unwrap().push(5);
+            if let Some(inputs) = args.inputs {
+                for val in inputs {
+                    sleep(Duration::from_millis(1000));
+                    input.lock().unwrap().push(val);
+                }
+            }
         });
 
         println!("===Execute===");
         println!("{:?}", sim.run(true, true));
+    } else if args.inputs.is_some() {
+        panic!("Input sequence given for simulator but not running simulation");
     }
 }

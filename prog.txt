@@ -2,10 +2,11 @@
 CALL start
 RETURN
 
-..RAM
+..ROM 1
 .LABEL start
-VALUE 1
-VALUE 2
-POP %0
-POP %1
+INPUT
+POP %5
+INPUT
+POP %6
+
 RETURN
