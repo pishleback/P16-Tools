@@ -3,8 +3,8 @@ use std::{
     hash::Hash,
 };
 
-use crate::datatypes::Nibble;
 use crate::assembly::{Assembly, Label, Line, Meta};
+use crate::datatypes::Nibble;
 
 #[derive(Debug)]
 struct Memory {
@@ -47,9 +47,7 @@ impl Memory {
     fn finish(&self) -> super::memory::ProgramMemory {
         super::memory::ProgramMemory::new(
             core::array::from_fn(|i| {
-                core::array::from_fn(|j| {
-                    self.rom_pages[i][j].unwrap_or(Nibble::N0)
-                })
+                core::array::from_fn(|j| self.rom_pages[i][j].unwrap_or(Nibble::N0))
             }),
             core::array::from_fn(|i| self.ram[i].unwrap_or(Nibble::N0)),
         )
@@ -344,10 +342,16 @@ impl Assembly {
                                 code.push(a);
                             }
                             crate::assembly::Command::Jump(label) => {
+                                if page != *label_to_page.get(&label).unwrap() {
+                                    panic!("Cannot jump to a different page");
+                                }
                                 code.push(2);
                                 code.label_target(label);
                             }
                             crate::assembly::Command::Branch(condition, label) => {
+                                if page != *label_to_page.get(&label).unwrap() {
+                                    panic!("Cannot branch to a different page");
+                                }
                                 match useflags_line {
                                     Some(useflags_line) => {
                                         match code.wait_for_flags(useflags_line) {
