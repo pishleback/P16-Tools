@@ -14,10 +14,13 @@ The P16 has 16 pages of program ROM, and the levers form page 0. The other 15 pa
 
 
 
-|  Assembly   |       Description       |                         Nibbles                          |
-| :---------: | :---------------------: | :------------------------------------------------------: |
-|   `PASS`    |      Does nothing       |                           `0`                            |
-| `VALUE <v>` | Push `v` onto the stack | `1VVVV` where `VVVV` is the 16-bit representation of `v` |
+|    Assembly     |                                                    Description                                                     |                            Nibbles                             |
+| :-------------: | :----------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------: |
+| `..ROM <page>`  | All instructions which follow are placed in ROM page #`page` until told otherwise where `page` is between 0 and 15 |                                                                |
+|     `..RAM`     |                        All instructions which follow are placed in RAM until told otherwise                        |                                                                |
+|     `PASS`      |                                                    Does nothing                                                    |                              `0`                               |
+| `VALUE <value>` |                                            Push `value` onto the stack                                             |  `1VVVV` where `VVVV` is the 16-bit representation of `value`  |
+| `JUMP <label>`  |                                       Continue execution from label `label`                                        | `2AA` where `AA` is the address of `label` in the current page |
 
 
 
