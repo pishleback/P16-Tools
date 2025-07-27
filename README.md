@@ -165,4 +165,4 @@ To run the program on the actual P16 we need to create a worldedit schematic con
 
 2. Enter two values on the input panel. <img width="3840" height="2097" alt="2025-07-27_22 13 56" src="https://github.com/user-attachments/assets/89e25405-9af6-4c52-a6f9-3b826e7c4d06" />
 
-3. Wait for the result to appear on output device 0.0. That is the first column of the binary output. <img width="3840" height="2097" alt="2025-07-27_22 18 26" src="https://github.com/user-attachments/assets/509dd6b3-883c-4eff-8aa0-2acf19bc83a5" />
+3. Wait for the result to appear on the output device. Output path `0.0` is the first column of the binary output. <img width="3840" height="2097" alt="2025-07-27_22 18 26" src="https://github.com/user-attachments/assets/509dd6b3-883c-4eff-8aa0-2acf19bc83a5" />
