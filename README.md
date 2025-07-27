@@ -1,5 +1,15 @@
 # P16
 
+The P16 is a general purpose 16-bit redstone CPU. It has 
+ - 8 kilobytes of RAM
+ - An additional 2 kilobytes of program ROM
+ - 16 general purpose registers
+ - An ALU implementing around 30 operations
+ - 16 branch conditions based on 5 boolean flags
+ - A data stacc (stack accumulator) architecture
+ - Hardware call stack
+ - Barrel shifter
+
 <img width="3011" height="2096" alt="2025-07-27_18 44 18" src="https://github.com/user-attachments/assets/af91c305-50c6-475f-ae44-ff7390219cea" />
 
 # Running a program
