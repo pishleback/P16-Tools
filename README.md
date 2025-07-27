@@ -89,7 +89,7 @@ There are four ALU flags `Z`, `N`, `C`, and `V` and an additional flag `I`. The 
 | `C`  | Carry Flag    | Set when an ALU operation (addition, subtraction, or shift) produces a carry out.                              |
 | `V`  | Overflow Flag | Set when an ALU operation (addition or subtraction) produces a carry out from the second-most significant bit. |
 
-The possible values for `condition` in the `BRANCH` instruction and their meaning in terms of the 5 CPU flags are:
+The possible values for `condition` in the `BRANCH` instruction and their meaning in terms of the 5 flags are:
 
 | Assembly | Name                  | Definition       | Machine Code |
 | :------- | :-------------------- | :--------------- | :----------- |
