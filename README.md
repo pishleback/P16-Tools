@@ -4,9 +4,9 @@
 
 # Running a program
 
-Programs can be loaded by manually setting the 32x32 grid of levers on top of the CPU.
+Simple programs can be loaded by manually setting the 32x32 grid of levers on top of the CPU.
 
-The P16 has 16 pages of program ROM, and the levers form page 0. The other 15 pages are comprised of 3 pages of torch ROM located directly below the levers, and 12 pages of barrel ROM located to the side. Schematics for populating these pages can be generated from an assembly file using the tools in this repository.
+There are 16 pages of program ROM in all. The levers on top are page 0. The other 15 pages are made up of 3 pages of torch ROM located directly below the levers, and 12 additional pages of barrel ROM located to the side. Schematics for populating these pages can be generated from an assembly file using the tools in this repository. A quick start guide is included in this file.
 
 # Instruction Set and Assembly Language
 
@@ -14,7 +14,9 @@ The P16 has 16 pages of program ROM, and the levers form page 0. The other 15 pa
 
 There are 16 general purpose registers and a data stack.
 
-The table below describes the assembly commands and what they do. The first column is the assembly instruction, the second column is a description of the effect of the instruction, the third column indicates whether the instruction updates the ALU flags. The last column describes how the instruction is translated into machine code, represented as a string of hexadecimal digits 0-9|A-F with lower case letters representing a hexadecimal digit with a variable value.
+The table below describes the assembly commands and what they do. The last column describes how the instruction is translated into machine code, represented as a string of hexadecimal digits 0-9|A-F with lower case letters representing a hexadecimal digit with a variable value.
+
+Example assembly files can be found in the `examples` folder.
 
 | Assembly                     | Description                                                                                                                                                                                                                                                                                                         |  Sets ALU Flags?   | Machine Code                                                                                                                                                                                                                                                                                   |
 | :--------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
