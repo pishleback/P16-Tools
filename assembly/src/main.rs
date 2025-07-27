@@ -78,7 +78,7 @@ fn main() {
         std::thread::spawn(move || {
             if let Some(inputs) = args.inputs {
                 for val in inputs {
-                    sleep(Duration::from_millis(1000));
+                    sleep(Duration::from_millis(100));
                     input.lock().unwrap().push(val);
                 }
             }
