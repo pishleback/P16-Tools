@@ -1,4 +1,4 @@
-# P16 Overview
+# P16
 
 <img width="3011" height="2096" alt="2025-07-27_18 44 18" src="https://github.com/user-attachments/assets/af91c305-50c6-475f-ae44-ff7390219cea" />
 
@@ -18,8 +18,8 @@ The table below describes the assembly commands and what they do. The first colu
 
 | Assembly                     | Description                                                                                                                                                                                                                                                                                                         |  Sets ALU Flags?   | Machine Code                                                                                                                                                                                                                                                                                   |
 | :--------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `..ROM <page>`               | All instructions which follow are placed in ROM page #`page` until told otherwise where `page` is between 0 and 15.                                                                                                                                                                                                 |         -          | -                                                                                                                                                                                                                                                                                              |
-| `..RAM`                      | All instructions which follow are placed in RAM until told otherwise.                                                                                                                                                                                                                                               |         -          | -                                                                                                                                                                                                                                                                                              |
+| `..ROM <page>`               | All following instructions are placed in ROM page #`page` until told otherwise where `page` is between 0 and 15.                                                                                                                                                                                                    |         -          | -                                                                                                                                                                                                                                                                                              |
+| `..RAM`                      | All following instructions are placed in RAM until told otherwise.                                                                                                                                                                                                                                                  |         -          | -                                                                                                                                                                                                                                                                                              |
 | `.LABEL <label>`             | Label a location in the program.                                                                                                                                                                                                                                                                                    |         -          | -                                                                                                                                                                                                                                                                                              |
 | `.USEFLAGS`                  | Placed after an instruction which sets ALU flags to ensure that the next `BRANCH` instruction uses those flags. Additional `PASS` instructions will be inserted to uphold this condition if possible. If a later instruction would overwrite the flags used by the `BRANCH` then the assembly will fail to compile. |         -          | -                                                                                                                                                                                                                                                                                              |
 | `PASS`                       | Does nothing.                                                                                                                                                                                                                                                                                                       |        :x:         | `0`                                                                                                                                                                                                                                                                                            |
@@ -102,11 +102,64 @@ The possible values for `condition` in the `BRANCH` instruction and their meanin
 | `GT`     | Greater Than          | `N`=`V` and !`Z` | `E`          |
 | `LE`     | Less or Equal         | `N`≠`V` or `Z`   | `F`          |
 
-# Create a Schematic0
+# Getting started
 
-`cargo run --manifest-path assembly/Cargo.toml -- -a prog.txt -o prog.json; py schematic/main.py prog.json prog.schem`
+## Prerequisites
 
-# Run a simulation
+ - Install Python 3
+ - Install Rust
+ - Clone this repository
 
-`cargo run --manifest-path assembly/Cargo.toml -q -- -a prog.txt -s`
+## Create an assembly file
 
+Create a file `prog.txt` in the root directory and populate it with an assembly program. To get started, copy the following program which takes two values as input, adds them, and outputs the result.
+
+```
+..ROM 0
+CALL start
+RETURN
+
+..ROM 1
+.LABEL start
+INPUT
+INPUT
+POP %0
+ADD %0
+OUTPUT 0.0
+RETURN
+```
+
+## Compile to machine code
+
+To compile the assembly to machine code, run `cargo run --manifest-path assembly/Cargo.toml --release -- -a prog.txt` in the root directory. The output should look like
+
+```
+ROM 0: C1007
+ROM 1: EE5080F087
+```
+
+It says that ROM page 0 should contain `C1007` and ROM page 1 should contain `EE5080F087`.
+
+## Run a simulation
+
+To simulate this program running on the P16 with inputs `3` and `5`, run `cargo run --manifest-path assembly/Cargo.toml --release -- -a prog.txt -s -i 3,5` in the root directory. The output contains information on the state of the CPU after each instruction and contains the result of 8
+```
+...
+Output
+[O0, O0] 8
+...
+```
+
+## Loading the program using a Schematic file
+
+To run the program on the actual P16 we need to create a worldedit schematic containing the program and paste it into the P16.
+
+1. Run `cargo run --manifest-path assembly/Cargo.toml --release -- -a prog.txt -o prog.json; py schematic/main.py prog.json prog.schem` to generate the schematic. 
+2. There is a warning it cannot generate schematics for populating ROM page 0. Rom page 0 is the lever ROM on top of the P16, and this has to be set manually, as shown IMG OF ROM PAGE 0
+3. Load `prog.schem` into the minecraft world and do `//paste -a` while standing on the start lever to load ROM page 1 onto the P16. IMG OF WHERE TO STAND
+
+## Running on the actual P16
+
+1. Turn on the start lever.
+2. Enter two values on the input panel.
+3. Wait for the result to appear on output device 0.0. That is the first column of the binary output. IMG
