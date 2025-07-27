@@ -1,0 +1,20 @@
+..ROM 0
+CALL start
+RETURN
+
+
+..ROM 1
+
+.LABEL start
+VALUE 1
+DUP
+POP %0
+.LABEL loop
+DUP
+OUTPUT 1.0
+SADD %0
+.USEFLAGS
+BRANCH C end
+JUMP loop
+.LABEL end
+RETURN
