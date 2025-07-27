@@ -162,7 +162,6 @@ Line: Line = {
     "INPUT" => Line::Command(Command::Input),
     "OUTPUT" <addr:DotSepNonEmpty<OctDigit>> => Line::Command(Command::Output(addr)),
 
-    "..AUTO" => Line::Meta(Meta::AutoPage),
     "..ROM" <n:NibbleNum> => Line::Meta(Meta::RomPage(n)),
     "..RAM" => Line::Meta(Meta::RamPage),
     ".LABEL" <l:Label> => Line::Meta(Meta::Label(l)),

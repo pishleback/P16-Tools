@@ -92,7 +92,6 @@ pub enum Command {
 
 #[derive(Debug, Clone)]
 pub enum Meta {
-    AutoPage,
     RomPage(Nibble),
     RamPage,
     Label(Label),

@@ -652,7 +652,6 @@ impl Assembly {
                             }
                         },
                         Line::Meta(meta) => match meta {
-                            Meta::AutoPage => unreachable!(),
                             Meta::RomPage(_) => unreachable!(),
                             Meta::RamPage => unreachable!(),
                             Meta::Label(label) => {
