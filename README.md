@@ -4,9 +4,9 @@
 
 # Running a program
 
-Programs can be loaded by manually setting the 32x32 grid of levers on top of the CPU.
+Simple programs can be loaded by manually setting the 32x32 grid of levers on top of the CPU.
 
-The P16 has 16 pages of program ROM, and the levers form page 0. The other 15 pages are comprised of 3 pages of torch ROM located directly below the levers, and 12 pages of barrel ROM located to the side. Schematics for populating these pages can be generated from an assembly file using the tools in this repository.
+There are 16 pages of program ROM in all. The levers on top are page 0. The other 15 pages are made up of 3 pages of torch ROM located directly below the levers, and 12 additional pages of barrel ROM located to the side. Schematics for populating these pages can be generated from an assembly file using the tools in this repository. A quick start guide is included in this file.
 
 # Instruction Set and Assembly Language
 
