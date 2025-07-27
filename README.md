@@ -14,9 +14,10 @@ The P16 has 16 pages of program ROM, and the levers form page 0. The other 15 pa
 
 
 
-| Assembly | Description | Nibbles |
-| :------: | :---------: | :-----: |
-|   PASS   |    Does nothing     |  0  |
+|  Assembly   |       Description       |                         Nibbles                          |
+| :---------: | :---------------------: | :------------------------------------------------------: |
+|   `PASS`    |      Does nothing       |                           `0`                            |
+| `VALUE <v>` | Push `v` onto the stack | `1VVVV` where `VVVV` is the 16-bit representation of `v` |
 
 
 
