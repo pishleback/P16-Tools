@@ -1,3 +1,7 @@
-# P16-Tools
+# Create a Schematic
 
-`cargo run --manifest-path assembly/Cargo.toml -- -a prog.txt -o prog.json; py schematic/main.py prog.json prog.schem; cargo run --manifest-path assembly/Cargo.toml -q -- -a prog.txt -s`
+`cargo run --manifest-path assembly/Cargo.toml -- -a prog.txt -o prog.json; py schematic/main.py prog.json prog.schem`
+
+# Run a simulation
+
+`cargo run --manifest-path assembly/Cargo.toml -q -- -a prog.txt -s`
