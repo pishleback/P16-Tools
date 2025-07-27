@@ -10,6 +10,12 @@ The P16 is a general purpose 16-bit redstone CPU. It has
  - Hardware call stack
  - Barrel shifter
 
+This file describes 
+ - The ISA
+ - The assembly language
+ - How to use the tools in this repository to compile an assembly file to machine code and generate a schematic containing the machine code
+ - How to paste the machine code into the P16 and run a program
+
 <img width="3011" height="2096" alt="2025-07-27_18 44 18" src="https://github.com/user-attachments/assets/af91c305-50c6-475f-ae44-ff7390219cea" />
 
 # Running a program
