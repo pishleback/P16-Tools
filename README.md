@@ -16,8 +16,8 @@ The P16 has 16 pages of program ROM, and the levers form page 0. The other 15 pa
 
 |     Nibble 1      | Nibble 2 | Nibble 3 | Nibble 4 | Nibble 5 |  ...  | Nibble n |
 | :---------------: | :------: | :------: | :------: | :------: | :---: | :------: |
-|    Python Hat     |   True   |  23.99   |          |          |       |          |
-|      SQL Hat      |   True   |  23.99   |          |          |       |          |
+|       PASS        |   True   |  23.99   |          |          |       |          |
+|      SQL Hat      |   True   |          |          |          |       |          |
 |  Codecademy Tee   |  False   |  19.99   |          |          |       |          |
 | Codecademy Hoodie |  False   |  42.99   |          |          |       |          |
 
