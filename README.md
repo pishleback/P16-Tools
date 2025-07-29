@@ -91,7 +91,7 @@ There are four ALU flags `Z`, `N`, `C`, and `V` and an additional flag `I`. The 
 
 The possible values for `condition` in the `BRANCH` instruction and their meaning in terms of the 5 flags are:
 
-| Assembly | Name                  | Definition       | Machine Code |
+| Assembly | Name                  | Branches When    | Machine Code |
 | :------- | :-------------------- | :--------------- | :----------- |
 | `I`      | Input queue non-empty | `I`              | `0`          |
 | `!I`     | Input queue empty     | !`I`             | `1`          |
