@@ -116,6 +116,8 @@ impl InputQueue {
     }
 }
 
+pub type OutputTarget = Box<dyn FnMut(Vec<OctDigit>, u16)>;
+
 pub struct Simulator {
     memory: ProgramMemory,
     program_counter: ProgramPtr,
@@ -126,7 +128,7 @@ pub struct Simulator {
     flags_delay: VecDeque<AluFlags>,
     flags: AluFlags,
     input_queue: Arc<Mutex<InputQueue>>,
-    output_targets: Vec<Box<dyn FnMut(Vec<OctDigit>, u16)>>,
+    output_targets: Vec<OutputTarget>,
 }
 impl Simulator {
     fn new(memory: ProgramMemory) -> Self {
@@ -163,7 +165,7 @@ impl Simulator {
         s
     }
 
-    pub fn subscribe_to_output(&mut self, callback: Box<dyn FnMut(Vec<OctDigit>, u16)>) {
+    pub fn subscribe_to_output(&mut self, callback: OutputTarget) {
         self.output_targets.push(callback);
     }
 
