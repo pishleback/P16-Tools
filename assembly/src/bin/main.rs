@@ -1,13 +1,6 @@
-use crate::assembly::load_assembly;
-use std::{thread::sleep, time::Duration};
-
-mod assembly;
-mod compile;
-mod datatypes;
-mod memory;
-mod simulator;
-
+use assembly::load_assembly;
 use clap::Parser;
+use std::{thread::sleep, time::Duration};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -56,7 +49,7 @@ fn main() {
     // std::env::set_var("RUST_BACKTRACE", "1");
 
     let source = std::fs::read_to_string(args.assembly).unwrap();
-    let assembly = load_assembly(&source);
+    let assembly = load_assembly(&source).unwrap();
     let memory = assembly.compile();
 
     if !args.quiet {
@@ -85,7 +78,6 @@ fn main() {
         });
 
         println!("{:?}", sim.run(true, true));
-
     } else if args.inputs.is_some() {
         panic!("Input sequence given for simulator but not running simulation");
     }

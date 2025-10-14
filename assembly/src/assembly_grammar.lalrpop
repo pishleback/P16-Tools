@@ -4,7 +4,7 @@ use std::str::FromStr;
 grammar;
 
 Label: Label = {
-    <label:r"[a-z|_][a-z|_|0-9]+"> => Label::new(String::from(label)).unwrap(),
+    <label:r"[a-z|_][a-z|_|0-9]*"> => Label::new(String::from(label)).unwrap(),
 }
 
 NibbleNum: Nibble = {
@@ -112,7 +112,7 @@ Condition: Condition = {
     "LE" => Condition::LessEqual,
 }
 
-Line: Line = {
+Line: WithPos<Line> = {
     "PASS" => Line::Command(Command::Pass),
     "VALUE" <value:SixteenBitNum> => Line::Command(Command::Value(value)),
     "JUMP" <l:Label> => Line::Command(Command::Jump(l)),

@@ -1,7 +1,13 @@
-use lalrpop_util::lalrpop_mod;
+use lalrpop_util::{lalrpop_mod, lexer::Token, state_machine::ParseError};
 lalrpop_mod!(assembly_grammar);
-
 use crate::datatypes::{Nibble, OctDigit};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct WithPos<T> {
+    start: usize,
+    end: usize,
+    t: T,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Label {
@@ -107,20 +113,20 @@ pub enum Line {
 
 #[derive(Debug, Clone)]
 pub struct Assembly {
-    lines: Vec<Line>,
+    lines: Vec<WithPos<Line>>,
 }
 
 impl Assembly {
-    pub fn lines(&self) -> &Vec<Line> {
-        &self.lines
+    pub fn lines(&self) -> Vec<&Line> {
+        self.lines.iter().map(|line| &line.t).collect::<Vec<_>>()
     }
-    fn new(lines: Vec<Line>) -> Self {
+    fn new(lines: Vec<WithPos<Line>>) -> Self {
         Self { lines }
     }
 }
 
-pub fn load_assembly(source: &str) -> Assembly {
-    assembly_grammar::AssemblyParser::new()
-        .parse(source)
-        .unwrap()
+pub fn load_assembly(
+    source: &str,
+) -> Result<Assembly, lalrpop_util::ParseError<usize, Token<'_>, &'static str>> {
+    assembly_grammar::AssemblyParser::new().parse(source)
 }

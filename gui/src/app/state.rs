@@ -1,4 +1,8 @@
-use egui::{Color32, TextBuffer, TextFormat, text::LayoutJob};
+use assembly::load_assembly;
+use btree_range_map::RangeMap;
+use eframe::glow::COLOR;
+use egui::{Color32, Stroke, TextBuffer, TextFormat, Visuals, text::LayoutJob};
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct State {
@@ -37,51 +41,88 @@ impl State {
             ui.heading("Central Text Area");
             ui.add_space(10.0);
 
-            // Define layouter closure
-            let mut layouter = |ui: &egui::Ui, text: &dyn TextBuffer, wrap_width: f32| {
-                let mut job = highlight_foo(text.as_str());
-                job.wrap.max_width = wrap_width;
-                ui.fonts(|f| f.layout_job(job))
-            };
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .stick_to_bottom(false)
+                .show(ui, |ui| {
+                    // Define layouter closure
+                    let mut layouter = |ui: &egui::Ui, text: &dyn TextBuffer, wrap_width: f32| {
+                        let mut job = layout_job(text.as_str(), ui.visuals());
+                        job.wrap.max_width = wrap_width;
+                        ui.fonts(|f| f.layout_job(job))
+                    };
 
-            ui.add(
-                egui::TextEdit::multiline(&mut self.text)
-                    .font(egui::TextStyle::Monospace)
-                    .desired_rows(20)
-                    .lock_focus(true)
-                    .desired_width(f32::INFINITY)
-                    .layouter(&mut layouter),
-            )
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.text)
+                            .font(egui::TextStyle::Monospace)
+                            .desired_rows(20)
+                            .lock_focus(true)
+                            .desired_width(f32::INFINITY)
+                            .layouter(&mut layouter),
+                    )
+                });
         });
     }
 }
 
+#[derive(Default, Debug)]
+struct TextAttrs {
+    colour: RangeMap<usize, Color32>,
+    underline: RangeMap<usize, Stroke>,
+}
+
 /// Highlights all instances of "foo" in blue.
-fn highlight_foo(text: &str) -> LayoutJob {
-    let mut job = LayoutJob::default();
-    let normal = TextFormat {
-        color: Color32::WHITE,
-        ..Default::default()
-    };
-    let highlight = TextFormat {
-        color: Color32::from_rgb(100, 180, 255),
-        ..Default::default()
+fn layout_job(text: &str, visuals: &Visuals) -> LayoutJob {
+    let mut text_attrs = TextAttrs::default();
+
+    let red_underline = Stroke {
+        width: 1.0,
+        color: Color32::RED,
     };
 
-    let mut start = 0;
-    for (idx, _) in text.match_indices("foo") {
-        // Add preceding normal text
-        if start < idx {
-            job.append(&text[start..idx], 0.0, normal.clone());
+    match load_assembly(text) {
+        Ok(assembly) => {
+            for line in assembly.lines() {
+                // colour it
+            }
         }
-        // Add highlighted “foo”
-        job.append("foo", 0.0, highlight.clone());
-        start = idx + 3;
-    }
-    // Add remaining text
-    if start < text.len() {
-        job.append(&text[start..], 0.0, normal);
+        Err(e) => {
+            println!("{}", e);
+            match e {
+                lalrpop_util::ParseError::InvalidToken { location } => {
+                    text_attrs
+                        .underline
+                        .insert(location..location + 1, red_underline);
+                }
+                lalrpop_util::ParseError::UnrecognizedEof { location, expected } => {
+                    text_attrs
+                        .underline
+                        .insert(location - 1..location, red_underline);
+                }
+                lalrpop_util::ParseError::UnrecognizedToken { token, expected } => {
+                    text_attrs.underline.insert(token.0..token.2, red_underline);
+                }
+                lalrpop_util::ParseError::ExtraToken { token } => {
+                    text_attrs.underline.insert(token.0..token.2, red_underline);
+                }
+                lalrpop_util::ParseError::User { error } => {
+                    text_attrs.underline.insert(0.., red_underline);
+                }
+            }
+        }
     }
 
+    let mut job = LayoutJob::default();
+    for i in 0..text.len() {
+        job.append(
+            &text[i..i + 1],
+            0.0,
+            TextFormat {
+                color: *text_attrs.colour.get(i).unwrap_or(&visuals.text_color()),
+                underline: *text_attrs.underline.get(i).unwrap_or(&Stroke::default()),
+                ..Default::default()
+            },
+        );
+    }
     job
 }
