@@ -45,15 +45,18 @@ pub enum Condition {
 #[derive(Debug, Clone)]
 pub enum Command {
     Pass,
-    Value(u16),
-    Jump(Label),
-    Branch(WithPos<Condition>, Label),
-    Push(Nibble),
-    Pop(Nibble),
-    Call(Label),
+    Value(WithPos<u16>),
+    Jump(WithPos<Label>),
+    Branch(WithPos<Condition>, WithPos<Label>),
+    Push(WithPos<Nibble>),
+    Pop(WithPos<Nibble>),
+    Call(WithPos<Label>),
     Return,
-    Add(Nibble),
-    Rotate { shift: Nibble, register: Nibble },
+    Add(WithPos<Nibble>),
+    Rotate {
+        shift: WithPos<Nibble>,
+        register: WithPos<Nibble>,
+    },
 
     // ALM1
     Duplicate,
@@ -74,22 +77,22 @@ pub enum Command {
     ArithmeticRightShift,
 
     // ALM2
-    Swap(Nibble),
-    Sub(Nibble),
-    Write(Nibble),
-    WritePop(Nibble),
-    And(Nibble),
-    Nand(Nibble),
-    Or(Nibble),
-    Nor(Nibble),
-    Xor(Nibble),
-    NXor(Nibble),
-    RegToFlags(Nibble),
-    Compare(Nibble),
-    SwapAdd(Nibble),
-    SwapSub(Nibble),
-    AddWithCarry(Nibble),
-    SubWithCarry(Nibble),
+    Swap(WithPos<Nibble>),
+    Sub(WithPos<Nibble>),
+    Write(WithPos<Nibble>),
+    WritePop(WithPos<Nibble>),
+    And(WithPos<Nibble>),
+    Nand(WithPos<Nibble>),
+    Or(WithPos<Nibble>),
+    Nor(WithPos<Nibble>),
+    Xor(WithPos<Nibble>),
+    NXor(WithPos<Nibble>),
+    RegToFlags(WithPos<Nibble>),
+    Compare(WithPos<Nibble>),
+    SwapAdd(WithPos<Nibble>),
+    SwapSub(WithPos<Nibble>),
+    AddWithCarry(WithPos<Nibble>),
+    SubWithCarry(WithPos<Nibble>),
 
     RawRamCall,
     Input,
@@ -98,9 +101,9 @@ pub enum Command {
 
 #[derive(Debug, Clone)]
 pub enum Meta {
-    RomPage(Nibble),
+    RomPage(WithPos<Nibble>),
     RamPage,
-    Label(Label),
+    Label(WithPos<Label>),
     UseFlags,
     Comment,
 }

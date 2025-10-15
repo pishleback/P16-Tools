@@ -1,8 +1,6 @@
-use assembly::{WithPos, load_assembly};
+use assembly::{Label, WithPos, load_assembly};
 use btree_range_map::RangeMap;
-use eframe::glow::COLOR;
 use egui::{Color32, Stroke, TextBuffer, TextFormat, Visuals, text::LayoutJob};
-use std::collections::{BTreeMap, HashMap};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct State {
@@ -92,18 +90,83 @@ fn layout_job(text: &str, visuals: &Visuals) -> LayoutJob {
                     .colour
                     .insert(*start..*end, visuals.strong_text_color());
 
-                #[allow(clippy::single_match)]
+                let add_label = |text_attrs: &mut TextAttrs, label: &WithPos<Label>| {
+                    text_attrs.colour.insert(
+                        label.start..label.end,
+                        visuals.text_color().lerp_to_gamma(Color32::GREEN, 0.5),
+                    );
+                };
+
+                let add_register =
+                    |text_attrs: &mut TextAttrs, register: &WithPos<assembly::Nibble>| {
+                        text_attrs.colour.insert(
+                            register.start..register.end,
+                            visuals.text_color().lerp_to_gamma(Color32::YELLOW, 0.5),
+                        );
+                    };
+
                 match line {
                     assembly::Line::Command(command) => match command {
+                        assembly::Command::Value(v) => {
+                            text_attrs.colour.insert(
+                                v.start..v.end,
+                                visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
+                            );
+                        }
+                        assembly::Command::Push(register)
+                        | assembly::Command::Pop(register)
+                        | assembly::Command::Add(register)
+                        | assembly::Command::Swap(register)
+                        | assembly::Command::Sub(register)
+                        | assembly::Command::Write(register)
+                        | assembly::Command::WritePop(register)
+                        | assembly::Command::And(register)
+                        | assembly::Command::Nand(register)
+                        | assembly::Command::Or(register)
+                        | assembly::Command::Nor(register)
+                        | assembly::Command::Xor(register)
+                        | assembly::Command::NXor(register)
+                        | assembly::Command::RegToFlags(register)
+                        | assembly::Command::Compare(register)
+                        | assembly::Command::SwapAdd(register)
+                        | assembly::Command::SwapSub(register)
+                        | assembly::Command::AddWithCarry(register)
+                        | assembly::Command::SubWithCarry(register) => {
+                            add_register(&mut text_attrs, register);
+                        }
+                        assembly::Command::Jump(label) => {
+                            add_label(&mut text_attrs, label);
+                        }
                         assembly::Command::Branch(condition, label) => {
                             text_attrs.colour.insert(
                                 condition.start..condition.end,
-                                visuals.text_color().lerp_to_gamma(Color32::RED, 0.5),
+                                visuals.text_color().lerp_to_gamma(Color32::BROWN, 0.5),
                             );
+                            add_label(&mut text_attrs, label);
+                        }
+                        assembly::Command::Call(label) => {
+                            add_label(&mut text_attrs, label);
+                        }
+                        assembly::Command::Rotate { shift, register } => {
+                            text_attrs.colour.insert(
+                                shift.start..shift.end,
+                                visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
+                            );
+                            add_register(&mut text_attrs, register);
                         }
                         _ => {}
                     },
-                    assembly::Line::Meta(meta) => {}
+                    assembly::Line::Meta(meta) => match meta {
+                        assembly::Meta::Label(label) => {
+                            add_label(&mut text_attrs, label);
+                        }
+                        assembly::Meta::RomPage(page) => {
+                            text_attrs
+                                .colour
+                                .insert(page.start..page.end, visuals.strong_text_color());
+                        }
+                        _ => {}
+                    },
                 }
             }
         }

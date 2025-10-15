@@ -12,3 +12,5 @@ pub use assembly::Label;
 pub use assembly::Line;
 pub use assembly::Meta;
 pub use assembly::WithPos;
+pub use datatypes::Nibble;
+pub use datatypes::OctDigit;

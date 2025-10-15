@@ -3,8 +3,12 @@ use std::str::FromStr;
 
 grammar;
 
-Label: Label = {
-    <label:r"[a-z|_][a-z|_|0-9]*"> => Label::new(String::from(label)).unwrap(),
+WithPos<T>: WithPos<T> = {
+    <start:@L> <t:T> <end:@R> => WithPos{ start, end, t }
+}
+
+Label: WithPos<Label> = {
+    <start:@L> <label:r"[a-z|_][a-z|_|0-9]*"> <end:@R> => WithPos{ start, end, t: Label::new(String::from(label)).unwrap() },
 }
 
 NibbleNum: Nibble = {
@@ -112,21 +116,17 @@ Condition: Condition = {
     "LE" => Condition::LessEqual,
 }
 
-ConditionWithPos: WithPos<Condition> = {
-    <start:@L> <c:Condition> <end:@R> => WithPos{ start, end, t: c },
-}
-
 Line: WithPos<Line> = {
-    <start:@L> "PASS" <end:@R>                                => WithPos{ start, end, t : Line::Command(Command::Pass) },
-    <start:@L> "VALUE" <end:@R> <value:SixteenBitNum>         => WithPos{ start, end, t : Line::Command(Command::Value(value)) },
-    <start:@L> "JUMP" <end:@R> <l:Label>                      => WithPos{ start, end, t : Line::Command(Command::Jump(l)) },
-    <start:@L> "BRANCH" <end:@R> <c:ConditionWithPos> <l:Label>      => WithPos{ start, end, t : Line::Command(Command::Branch(c, l)) },
-    <start:@L> "PUSH" <end:@R> <r:Register>                   => WithPos{ start, end, t : Line::Command(Command::Push(r)) },
-    <start:@L> "POP" <end:@R> <r:Register>                    => WithPos{ start, end, t : Line::Command(Command::Pop(r)) },
-    <start:@L> "CALL" <end:@R> <l:Label>                      => WithPos{ start, end, t : Line::Command(Command::Call(l)) },
-    <start:@L> "RETURN" <end:@R>                              => WithPos{ start, end, t : Line::Command(Command::Return) },
-    <start:@L> "ADD" <end:@R> <r:Register>                    => WithPos{ start, end, t : Line::Command(Command::Add(r)) },
-    <start:@L> "ROTATE" <end:@R> <s:NibbleNum> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::Rotate{ shift : s, register : r }) },
+    <start:@L> "PASS" <end:@R>                                                  => WithPos{ start, end, t : Line::Command(Command::Pass) },
+    <start:@L> "VALUE" <end:@R> <value:WithPos<SixteenBitNum>>                  => WithPos{ start, end, t : Line::Command(Command::Value(value)) },
+    <start:@L> "JUMP" <end:@R> <l:Label>                                        => WithPos{ start, end, t : Line::Command(Command::Jump(l)) },
+    <start:@L> "BRANCH" <end:@R> <c:WithPos<Condition>> <l:Label>               => WithPos{ start, end, t : Line::Command(Command::Branch(c, l)) },
+    <start:@L> "PUSH" <end:@R> <r:WithPos<Register>>                            => WithPos{ start, end, t : Line::Command(Command::Push(r)) },
+    <start:@L> "POP" <end:@R> <r:WithPos<Register>>                             => WithPos{ start, end, t : Line::Command(Command::Pop(r)) },
+    <start:@L> "CALL" <end:@R> <l:Label>                                        => WithPos{ start, end, t : Line::Command(Command::Call(l)) },
+    <start:@L> "RETURN" <end:@R>                                                => WithPos{ start, end, t : Line::Command(Command::Return) },
+    <start:@L> "ADD" <end:@R> <r:WithPos<Register>>                             => WithPos{ start, end, t : Line::Command(Command::Add(r)) },
+    <start:@L> "ROTATE" <end:@R> <s:WithPos<NibbleNum>> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::Rotate{ shift : s, register : r }) },
 
     <start:@L> "DUP" <end:@R>     => WithPos{ start, end, t : Line::Command(Command::Duplicate) },
     <start:@L> "NOT" <end:@R>     => WithPos{ start, end, t : Line::Command(Command::Not) },
@@ -145,31 +145,31 @@ Line: WithPos<Line> = {
     <start:@L> "IRSH" <end:@R>    => WithPos{ start, end, t : Line::Command(Command::RightShiftOneIn) },
     <start:@L> "ARSH" <end:@R>    => WithPos{ start, end, t : Line::Command(Command::ArithmeticRightShift) },
 
-    <start:@L> "SWAP" <end:@R> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::Swap(r)) },
-    <start:@L> "SUB" <end:@R> <r:Register>    => WithPos{ start, end, t : Line::Command(Command::Sub(r)) },
-    <start:@L> "KWRITE" <end:@R> <r:Register> => WithPos{ start, end, t : Line::Command(Command::Write(r)) },
-    <start:@L> "PWRITE" <end:@R> <r:Register> => WithPos{ start, end, t : Line::Command(Command::WritePop(r)) },
-    <start:@L> "AND" <end:@R> <r:Register>    => WithPos{ start, end, t : Line::Command(Command::And(r)) },
-    <start:@L> "NAND" <end:@R> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::Nand(r)) },
-    <start:@L> "OR" <end:@R> <r:Register>     => WithPos{ start, end, t : Line::Command(Command::Or(r)) },
-    <start:@L> "NOR" <end:@R> <r:Register>    => WithPos{ start, end, t : Line::Command(Command::Nor(r)) },
-    <start:@L> "XOR" <end:@R> <r:Register>    => WithPos{ start, end, t : Line::Command(Command::Xor(r)) },
-    <start:@L> "NXOR" <end:@R> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::NXor(r)) },
-    <start:@L> "SETF" <end:@R> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::RegToFlags(r)) },
-    <start:@L> "CMP" <end:@R> <r:Register>    => WithPos{ start, end, t : Line::Command(Command::Compare(r)) },
-    <start:@L> "SADD" <end:@R> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::SwapAdd(r)) },
-    <start:@L> "SSUB" <end:@R> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::SwapSub(r)) },
-    <start:@L> "CADD" <end:@R> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::AddWithCarry(r)) },
-    <start:@L> "CSUB" <end:@R> <r:Register>   => WithPos{ start, end, t : Line::Command(Command::SubWithCarry(r)) },
+    <start:@L> "SWAP" <end:@R> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::Swap(r)) },
+    <start:@L> "SUB" <end:@R> <r:WithPos<Register>>    => WithPos{ start, end, t : Line::Command(Command::Sub(r)) },
+    <start:@L> "KWRITE" <end:@R> <r:WithPos<Register>> => WithPos{ start, end, t : Line::Command(Command::Write(r)) },
+    <start:@L> "PWRITE" <end:@R> <r:WithPos<Register>> => WithPos{ start, end, t : Line::Command(Command::WritePop(r)) },
+    <start:@L> "AND" <end:@R> <r:WithPos<Register>>    => WithPos{ start, end, t : Line::Command(Command::And(r)) },
+    <start:@L> "NAND" <end:@R> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::Nand(r)) },
+    <start:@L> "OR" <end:@R> <r:WithPos<Register>>     => WithPos{ start, end, t : Line::Command(Command::Or(r)) },
+    <start:@L> "NOR" <end:@R> <r:WithPos<Register>>    => WithPos{ start, end, t : Line::Command(Command::Nor(r)) },
+    <start:@L> "XOR" <end:@R> <r:WithPos<Register>>    => WithPos{ start, end, t : Line::Command(Command::Xor(r)) },
+    <start:@L> "NXOR" <end:@R> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::NXor(r)) },
+    <start:@L> "SETF" <end:@R> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::RegToFlags(r)) },
+    <start:@L> "CMP" <end:@R> <r:WithPos<Register>>    => WithPos{ start, end, t : Line::Command(Command::Compare(r)) },
+    <start:@L> "SADD" <end:@R> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::SwapAdd(r)) },
+    <start:@L> "SSUB" <end:@R> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::SwapSub(r)) },
+    <start:@L> "CADD" <end:@R> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::AddWithCarry(r)) },
+    <start:@L> "CSUB" <end:@R> <r:WithPos<Register>>   => WithPos{ start, end, t : Line::Command(Command::SubWithCarry(r)) },
 
     <start:@L> "RAWRAMCALL" <end:@R>                              => WithPos{ start, end, t : Line::Command(Command::RawRamCall) },
     <start:@L> "INPUT" <end:@R>                                   => WithPos{ start, end, t : Line::Command(Command::Input) },
     <start:@L> "OUTPUT" <end:@R> <addr:DotSepNonEmpty<OctDigit>>  => WithPos{ start, end, t : Line::Command(Command::Output(addr)) },
 
-    <start:@L> "..ROM" <end:@R> <n:NibbleNum> => WithPos{ start, end, t : Line::Meta(Meta::RomPage(n)) },
-    <start:@L> "..RAM" <end:@R>               => WithPos{ start, end, t : Line::Meta(Meta::RamPage) },
-    <start:@L> ".LABEL" <end:@R> <l:Label>    => WithPos{ start, end, t : Line::Meta(Meta::Label(l)) },
-    <start:@L> ".USEFLAGS" <end:@R>           => WithPos{ start, end, t : Line::Meta(Meta::UseFlags) },
+    <start:@L> "..ROM" <end:@R> <n:WithPos<NibbleNum>>  => WithPos{ start, end, t : Line::Meta(Meta::RomPage(n)) },
+    <start:@L> "..RAM" <end:@R>                         => WithPos{ start, end, t : Line::Meta(Meta::RamPage) },
+    <start:@L> ".LABEL" <end:@R> <l:Label>              => WithPos{ start, end, t : Line::Meta(Meta::Label(l)) },
+    <start:@L> ".USEFLAGS" <end:@R>                     => WithPos{ start, end, t : Line::Meta(Meta::UseFlags) },
 
     <start:@L> ".COMMENT" <end:@R> <c:r#""[0-9|a-z|A-Z|\s|']*""#> => WithPos{ start, end, t : Line::Meta(Meta::Comment) },
 }
