@@ -3,11 +3,11 @@ use std::{
     hash::Hash,
 };
 
-use crate::datatypes::Nibble;
 use crate::{
     assembly::{Assembly, Label, Line, Meta},
     WithPos,
 };
+use crate::{datatypes::Nibble, ProgramMemory};
 
 #[derive(Debug)]
 struct Memory {
@@ -47,8 +47,8 @@ impl Memory {
         }
     }
 
-    fn finish(&self) -> super::memory::ProgramMemory {
-        super::memory::ProgramMemory::new(
+    fn finish(&self) -> ProgramMemory {
+        ProgramMemory::new(
             core::array::from_fn(|i| {
                 core::array::from_fn(|j| self.rom_pages[i][j].unwrap_or(Nibble::N0))
             }),
@@ -109,7 +109,7 @@ impl MemoryManager {
         let (page, ptr) = match page {
             PageIdent::Rom(nibble) => (PageLocation::Rom(nibble), self.rom_ptr[nibble.as_usize()]),
             PageIdent::Ram(ident) => {
-                while self.ram_ptr % 4 != 0 {
+                while !self.ram_ptr.is_multiple_of(4) {
                     self.ram_ptr += 1;
                 }
                 if self.ram_ident_to_addr.contains_key(&ident) {
@@ -180,8 +180,11 @@ impl MemoryManager {
 
 #[derive(Debug, Clone, Copy)]
 enum FlagsSetBy {
+    // Nothing can set the flags because it is unreachable e.g. RETURN just before
     Unreachable,
+    // The flags could come from an unknown source e.g. from a jump from elsewhere
     Unknown,
+    // The flags are set here
     Nibble(u8),
 }
 
@@ -288,48 +291,78 @@ impl<'a> MemoryPageManager<'a> {
     }
 }
 
-impl Assembly {
-    pub fn compile(&self) -> super::memory::ProgramMemory {
-        let mut pages: Vec<(PageIdent, Vec<Line>)> = vec![];
-        let mut label_to_page: HashMap<Label, PageIdent> = HashMap::new();
-        {
-            let mut ram_page_ident_counter = 0;
-            for line in self.lines() {
-                if let crate::assembly::Line::Meta(Meta::Label(label)) = line {
-                    if label_to_page.contains_key(&label.t) {
-                        panic!("Duplicate label `{}`", label.t.to_string());
-                    }
-                    label_to_page.insert(label.t.clone(), pages.last().unwrap().0);
-                }
+#[derive(Debug, Clone)]
+pub struct CompileSuccess {
+    pub program_memory: ProgramMemory,
+}
 
-                match line {
-                    crate::assembly::Line::Meta(Meta::RomPage(n)) => {
-                        pages.push((PageIdent::Rom(n.t), vec![]));
-                    }
-                    crate::assembly::Line::Meta(Meta::RamPage) => {
-                        pages.push((PageIdent::Ram(ram_page_ident_counter), vec![]));
-                        ram_page_ident_counter += 1;
-                    }
-                    _ => match pages.last_mut() {
-                        Some((_, lines)) => {
-                            lines.push(line.clone());
-                        }
-                        None => {
-                            panic!("Probably forgot to specify the first page");
-                        }
-                    },
+#[derive(Debug, Clone)]
+pub enum CompileError {
+    DuplicateLabel {
+        line: usize,
+        label: String,
+    },
+    MissingLabel {
+        line: usize,
+    },
+    MissingPageStart {
+        line: usize,
+    },
+    JumpOrBranchToOtherPage {
+        line: usize,
+    },
+    BadUseflags {
+        branch_line: usize,
+        useflags_line: usize,
+    },
+}
+
+pub fn compile_assembly(assembly: &Assembly) -> Result<CompileSuccess, CompileError> {
+    let mut pages: Vec<(PageIdent, Vec<(Line, usize)>)> = vec![];
+    let mut label_to_page: HashMap<Label, PageIdent> = HashMap::new();
+    {
+        let mut ram_page_ident_counter = 0;
+        for (line_num, &line) in assembly.lines().iter().enumerate() {
+            if let crate::assembly::Line::Meta(Meta::Label(label)) = line {
+                if label_to_page.contains_key(&label.t) {
+                    return Err(CompileError::DuplicateLabel {
+                        line: line_num,
+                        label: label.t.to_string().clone(),
+                    });
                 }
+                label_to_page.insert(label.t.clone(), pages.last().unwrap().0);
+            }
+
+            match line {
+                crate::assembly::Line::Meta(Meta::RomPage(n)) => {
+                    pages.push((PageIdent::Rom(n.t), vec![]));
+                }
+                crate::assembly::Line::Meta(Meta::RamPage) => {
+                    pages.push((PageIdent::Ram(ram_page_ident_counter), vec![]));
+                    ram_page_ident_counter += 1;
+                }
+                _ => match pages.last_mut() {
+                    Some((_, lines)) => {
+                        lines.push((line.clone(), line_num));
+                    }
+                    None => {
+                        // Probably forgot to specify the first page
+                        return Err(CompileError::MissingPageStart { line: line_num });
+                    }
+                },
             }
         }
+    }
 
-        let mut code = MemoryManager::blank();
-        {
-            for (page, lines) in pages {
-                let mut code = code.new_page(page);
-                let mut useflags_line: Option<u8> = None;
-                for line in lines {
-                    match line {
-                        Line::Command(command) => match command {
+    let mut code = MemoryManager::blank();
+    {
+        for (page, lines) in pages {
+            let mut code = code.new_page(page);
+            let mut useflags_line: Option<(u8, usize)> = None; // (memory location, assembly line number)
+            for (line, line_num) in lines {
+                match line {
+                    Line::Command(command) => {
+                        match command {
                             crate::assembly::Command::Pass => {
                                 code.push(0);
                             }
@@ -345,19 +378,31 @@ impl Assembly {
                                 code.push(a);
                             }
                             crate::assembly::Command::Jump(label) => {
-                                if page != *label_to_page.get(&label.t).unwrap() {
-                                    panic!("Cannot jump to a different page");
+                                let target_page = label_to_page.get(&label.t);
+                                if target_page.is_none() {
+                                    return Err(CompileError::MissingLabel { line: line_num });
+                                }
+                                if page != *target_page.unwrap() {
+                                    return Err(CompileError::JumpOrBranchToOtherPage {
+                                        line: line_num,
+                                    });
                                 }
                                 code.push(2);
                                 code.label_target(label.t);
                             }
                             crate::assembly::Command::Branch(condition, label) => {
-                                if page != *label_to_page.get(&label.t).unwrap() {
-                                    panic!("Cannot branch to a different page");
+                                let target_page = label_to_page.get(&label.t);
+                                if target_page.is_none() {
+                                    return Err(CompileError::MissingLabel { line: line_num });
+                                }
+                                if page != *target_page.unwrap() {
+                                    return Err(CompileError::JumpOrBranchToOtherPage {
+                                        line: line_num,
+                                    });
                                 }
                                 match useflags_line {
-                                    Some(useflags_line) => {
-                                        match code.wait_for_flags(useflags_line) {
+                                    Some((useflags_location, useflags_assembly_line)) => {
+                                        match code.wait_for_flags(useflags_location) {
                                             Some(delay) => {
                                                 for _ in 0..delay {
                                                     code.push(0);
@@ -365,30 +410,33 @@ impl Assembly {
                                             }
                                             None => {
                                                 match match code.delayed_flags_for_branch() {
-                                                    FlagsSetBy::Unreachable => {
-                                                        Err("Is unreachable".to_string())
-                                                    }
-                                                    FlagsSetBy::Unknown => Err("The flags could come from an unknown source".to_string()),
-                                                    FlagsSetBy::Nibble(branch_line) => {
-                                                        if useflags_line != branch_line {
-                                                            Err(format!(
-                                                            "Actually uses flags from {branch_line}",
-                                                        ))
-                                                        } else {
-                                                            Ok(())
-                                                        }
-                                                    }
-                                                } {
-                                                    Ok(()) => {}
-                                                    Err(err) => {
-                                                        panic!("BRANCH wants to use flags from .USEFLAGS {useflags_line} but: {err}");
-                                                    }
+                                            FlagsSetBy::Unreachable => {
+                                                Err("Is unreachable".to_string())
+                                            }
+                                            FlagsSetBy::Unknown => {
+                                                Err("The flags could come from an unknown source"
+                                                    .to_string())
+                                            }
+                                            FlagsSetBy::Nibble(branch_line) => {
+                                                if useflags_location != branch_line {
+                                                    Err(format!(
+                                                        "Actually uses flags from {branch_line}",
+                                                    ))
+                                                } else {
+                                                    Ok(())
                                                 }
+                                            }
+                                        } {
+                                            Ok(()) => {}
+                                            Err(err) => {
+                                                return Err(CompileError::BadUseflags { branch_line: line_num, useflags_line: useflags_assembly_line });
+                                            }
+                                        }
                                             }
                                         }
                                     }
                                     None => {
-                                        //TODO: should this cause an error?
+                                        //TODO: should this cause an error? Should every branch require a .USEFLAGS?
                                     }
                                 }
                                 useflags_line = None;
@@ -423,7 +471,11 @@ impl Assembly {
                                 code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Call(label) => {
-                                let target_page = *label_to_page.get(&label.t).unwrap();
+                                let target_page = label_to_page.get(&label.t);
+                                if target_page.is_none() {
+                                    return Err(CompileError::MissingLabel { line: line_num });
+                                }
+                                let target_page = *target_page.unwrap();
                                 if page == target_page {
                                     code.push(6);
                                     code.label_target(label.t);
@@ -653,32 +705,34 @@ impl Assembly {
                                 // Because the output instruction may pause if the output is blocked, we don't know what the flags will be
                                 code.unknown_flags();
                             }
-                        },
-                        Line::Meta(meta) => match meta {
-                            Meta::RomPage(_) => unreachable!(),
-                            Meta::RamPage => unreachable!(),
-                            Meta::Label(label) => {
-                                code.label_location(label.t);
-                                // Because we could jump to here from somewhere else
-                                code.unknown_flags();
-                            }
-                            Meta::UseFlags => match code.flags_as_set {
-                                FlagsSetBy::Unreachable => panic!(".USEFLAGS is unreachable"),
-                                FlagsSetBy::Unknown => {
-                                    panic!(".USEFLAGS has unknown origin for flag")
-                                }
-                                FlagsSetBy::Nibble(n) => {
-                                    useflags_line = Some(n);
-                                }
-                            },
-                            Meta::Comment => {}
-                        },
+                        }
                     }
+                    Line::Meta(meta) => match meta {
+                        Meta::RomPage(_) => unreachable!(),
+                        Meta::RamPage => unreachable!(),
+                        Meta::Label(label) => {
+                            code.label_location(label.t);
+                            // Because we could jump to here from somewhere else
+                            code.unknown_flags();
+                        }
+                        Meta::UseFlags => match code.flags_as_set {
+                            FlagsSetBy::Unreachable => panic!(".USEFLAGS is unreachable"),
+                            FlagsSetBy::Unknown => {
+                                panic!(".USEFLAGS has unknown origin for flag")
+                            }
+                            FlagsSetBy::Nibble(n) => {
+                                useflags_line = Some((n, line_num));
+                            }
+                        },
+                        Meta::Comment(..) => {}
+                    },
                 }
             }
         }
-
-        let memory = code.finish();
-        memory.finish()
     }
+
+    let memory = code.finish();
+    let program_memory = memory.finish();
+
+    Ok(CompileSuccess { program_memory })
 }

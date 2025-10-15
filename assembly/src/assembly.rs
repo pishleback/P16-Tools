@@ -1,4 +1,4 @@
-use lalrpop_util::{lalrpop_mod, lexer::Token, state_machine::ParseError};
+use lalrpop_util::{lalrpop_mod, lexer::Token};
 lalrpop_mod!(assembly_grammar);
 use crate::datatypes::{Nibble, OctDigit};
 
@@ -105,7 +105,7 @@ pub enum Meta {
     RamPage,
     Label(WithPos<Label>),
     UseFlags,
-    Comment,
+    Comment(WithPos<String>),
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +126,10 @@ impl Assembly {
 
     pub fn lines_with_pos(&self) -> Vec<&WithPos<Line>> {
         self.lines.iter().collect()
+    }
+
+    pub fn line_with_pos(&self, line: usize) -> &WithPos<Line> {
+        &self.lines[line]
     }
 
     fn new(lines: Vec<WithPos<Line>>) -> Self {

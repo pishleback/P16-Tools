@@ -1,3 +1,4 @@
+mod assembly_text_box;
 mod state;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.

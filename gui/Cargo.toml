@@ -20,7 +20,6 @@ eframe = { version = "0.32", default-features = false, features = [
     "x11",           # To support older Linux distributions (restores one of the default features)
 ] }
 log = "0.4.27"
-
 assembly = { path = "../assembly", version = "0.0.1" }
 lalrpop-util = { version = "0.21.0", features = ["lexer", "unicode"] }
 

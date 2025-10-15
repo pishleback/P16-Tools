@@ -171,7 +171,7 @@ Line: WithPos<Line> = {
     <start:@L> ".LABEL" <end:@R> <l:Label>              => WithPos{ start, end, t : Line::Meta(Meta::Label(l)) },
     <start:@L> ".USEFLAGS" <end:@R>                     => WithPos{ start, end, t : Line::Meta(Meta::UseFlags) },
 
-    <start:@L> ".COMMENT" <end:@R> <c:r#""[0-9|a-z|A-Z|\s|']*""#> => WithPos{ start, end, t : Line::Meta(Meta::Comment) },
+    <start:@L> ".COMMENT" <end:@R> <startc:@L> <c:r#""[0-9|a-z|A-Z|\s|']*""#> <endc:@R> => WithPos{ start, end, t : Line::Meta(Meta::Comment(WithPos{ start: startc, end: endc, t: String::from(c) })) },
 }
 
 pub Assembly: Assembly = {

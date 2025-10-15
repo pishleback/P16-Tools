@@ -130,6 +130,7 @@ pub struct Simulator {
     input_queue: Arc<Mutex<InputQueue>>,
     output_targets: Vec<OutputTarget>,
 }
+
 impl Simulator {
     fn new(memory: ProgramMemory) -> Self {
         let mut s = Self {
