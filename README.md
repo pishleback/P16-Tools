@@ -10,6 +10,8 @@ The P16 is a general purpose 16-bit redstone CPU. It has
  - Hardware call stack
  - Barrel shifter
 
+There is a work in progress online assembler [here](https://pishleback.github.io/P16-Tools/).
+
 <img width="3011" height="2096" alt="2025-07-27_18 44 18" src="https://github.com/user-attachments/assets/af91c305-50c6-475f-ae44-ff7390219cea" />
 
 # Running a program
