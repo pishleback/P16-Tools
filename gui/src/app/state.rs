@@ -1,4 +1,4 @@
-use assembly::load_assembly;
+use assembly::{WithPos, load_assembly};
 use btree_range_map::RangeMap;
 use eframe::glow::COLOR;
 use egui::{Color32, Stroke, TextBuffer, TextFormat, Visuals, text::LayoutJob};
@@ -82,8 +82,13 @@ fn layout_job(text: &str, visuals: &Visuals) -> LayoutJob {
 
     match load_assembly(text) {
         Ok(assembly) => {
-            for line in assembly.lines() {
-                // colour it
+            for WithPos {
+                start,
+                end,
+                t: line,
+            } in assembly.lines_with_pos()
+            {
+                text_attrs.colour.insert(*start..*end, visuals.strong_text_color());
             }
         }
         Err(e) => {

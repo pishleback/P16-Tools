@@ -3,10 +3,10 @@ lalrpop_mod!(assembly_grammar);
 use crate::datatypes::{Nibble, OctDigit};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct WithPos<T> {
-    start: usize,
-    end: usize,
-    t: T,
+pub struct WithPos<T> {
+    pub start: usize,
+    pub end: usize,
+    pub t: T,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -120,6 +120,11 @@ impl Assembly {
     pub fn lines(&self) -> Vec<&Line> {
         self.lines.iter().map(|line| &line.t).collect::<Vec<_>>()
     }
+
+    pub fn lines_with_pos(&self) -> Vec<&WithPos<Line>> {
+        self.lines.iter().collect()
+    }
+
     fn new(lines: Vec<WithPos<Line>>) -> Self {
         Self { lines }
     }
