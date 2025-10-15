@@ -47,7 +47,7 @@ pub enum Command {
     Pass,
     Value(u16),
     Jump(Label),
-    Branch(Condition, Label),
+    Branch(WithPos<Condition>, Label),
     Push(Nibble),
     Pop(Nibble),
     Call(Label),

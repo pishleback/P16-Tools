@@ -390,7 +390,7 @@ impl Assembly {
                                 }
                                 useflags_line = None;
                                 code.push(3);
-                                code.push(match condition {
+                                code.push(match condition.t {
                                     crate::assembly::Condition::InputReady => 0,
                                     crate::assembly::Condition::InputNotReady => 1,
                                     crate::assembly::Condition::Equal => 2,

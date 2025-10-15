@@ -88,7 +88,23 @@ fn layout_job(text: &str, visuals: &Visuals) -> LayoutJob {
                 t: line,
             } in assembly.lines_with_pos()
             {
-                text_attrs.colour.insert(*start..*end, visuals.strong_text_color());
+                text_attrs
+                    .colour
+                    .insert(*start..*end, visuals.strong_text_color());
+
+                #[allow(clippy::single_match)]
+                match line {
+                    assembly::Line::Command(command) => match command {
+                        assembly::Command::Branch(condition, label) => {
+                            text_attrs.colour.insert(
+                                condition.start..condition.end,
+                                visuals.text_color().lerp_to_gamma(Color32::RED, 0.5),
+                            );
+                        }
+                        _ => {}
+                    },
+                    assembly::Line::Meta(meta) => {}
+                }
             }
         }
         Err(e) => {
