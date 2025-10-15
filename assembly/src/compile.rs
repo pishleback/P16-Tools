@@ -3,8 +3,11 @@ use std::{
     hash::Hash,
 };
 
-use crate::assembly::{Assembly, Label, Line, Meta};
 use crate::datatypes::Nibble;
+use crate::{
+    assembly::{Assembly, Label, Line, Meta},
+    WithPos,
+};
 
 #[derive(Debug)]
 struct Memory {
@@ -293,15 +296,15 @@ impl Assembly {
             let mut ram_page_ident_counter = 0;
             for line in self.lines() {
                 if let crate::assembly::Line::Meta(Meta::Label(label)) = line {
-                    if label_to_page.contains_key(label) {
-                        panic!("Duplicate label `{}`", label.to_string());
+                    if label_to_page.contains_key(&label.t) {
+                        panic!("Duplicate label `{}`", label.t.to_string());
                     }
-                    label_to_page.insert(label.clone(), pages.last().unwrap().0);
+                    label_to_page.insert(label.t.clone(), pages.last().unwrap().0);
                 }
 
                 match line {
                     crate::assembly::Line::Meta(Meta::RomPage(n)) => {
-                        pages.push((PageIdent::Rom(*n), vec![]));
+                        pages.push((PageIdent::Rom(n.t), vec![]));
                     }
                     crate::assembly::Line::Meta(Meta::RamPage) => {
                         pages.push((PageIdent::Ram(ram_page_ident_counter), vec![]));
@@ -330,7 +333,7 @@ impl Assembly {
                             crate::assembly::Command::Pass => {
                                 code.push(0);
                             }
-                            crate::assembly::Command::Value(v) => {
+                            crate::assembly::Command::Value(WithPos { t: v, .. }) => {
                                 code.push(1);
                                 let a = (v & 15) as u8;
                                 let b = ((v >> 4) & 15) as u8;
@@ -342,14 +345,14 @@ impl Assembly {
                                 code.push(a);
                             }
                             crate::assembly::Command::Jump(label) => {
-                                if page != *label_to_page.get(&label).unwrap() {
+                                if page != *label_to_page.get(&label.t).unwrap() {
                                     panic!("Cannot jump to a different page");
                                 }
                                 code.push(2);
-                                code.label_target(label);
+                                code.label_target(label.t);
                             }
                             crate::assembly::Command::Branch(condition, label) => {
-                                if page != *label_to_page.get(&label).unwrap() {
+                                if page != *label_to_page.get(&label.t).unwrap() {
                                     panic!("Cannot branch to a different page");
                                 }
                                 match useflags_line {
@@ -390,7 +393,7 @@ impl Assembly {
                                 }
                                 useflags_line = None;
                                 code.push(3);
-                                code.push(match condition {
+                                code.push(match condition.t {
                                     crate::assembly::Condition::InputReady => 0,
                                     crate::assembly::Condition::InputNotReady => 1,
                                     crate::assembly::Condition::Equal => 2,
@@ -408,34 +411,34 @@ impl Assembly {
                                     crate::assembly::Condition::Greater => 14,
                                     crate::assembly::Condition::LessEqual => 15,
                                 });
-                                code.label_target(label);
+                                code.label_target(label.t);
                                 code.flush_flags();
                             }
                             crate::assembly::Command::Push(nibble) => {
                                 code.push(4);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Pop(nibble) => {
                                 code.push(5);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Call(label) => {
-                                let target_page = *label_to_page.get(&label).unwrap();
+                                let target_page = *label_to_page.get(&label.t).unwrap();
                                 if page == target_page {
                                     code.push(6);
-                                    code.label_target(label);
+                                    code.label_target(label.t);
                                 } else {
                                     match target_page {
                                         PageIdent::Rom(nibble) => {
                                             code.push(12);
                                             code.push(nibble.as_u8());
-                                            code.label_target(label);
+                                            code.label_target(label.t);
                                         }
                                         PageIdent::Ram(ident) => {
                                             code.push(1);
                                             code.ram_addr(ident);
                                             code.push(13);
-                                            code.label_target(label);
+                                            code.label_target(label.t);
                                         }
                                     }
                                 }
@@ -448,12 +451,12 @@ impl Assembly {
                             crate::assembly::Command::Add(nibble) => {
                                 code.set_flags();
                                 code.push(8);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Rotate { shift, register } => {
                                 code.push(9);
-                                code.push(shift.as_u8());
-                                code.push(register.as_u8());
+                                code.push(shift.t.as_u8());
+                                code.push(register.t.as_u8());
                             }
                             crate::assembly::Command::Duplicate => {
                                 code.push(10);
@@ -535,95 +538,95 @@ impl Assembly {
                             crate::assembly::Command::Swap(nibble) => {
                                 code.push(11);
                                 code.push(0);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Sub(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(1);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Write(nibble) => {
                                 code.push(11);
                                 code.push(2);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::WritePop(nibble) => {
                                 code.push(11);
                                 code.push(3);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::And(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(4);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Nand(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(5);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Or(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(6);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Nor(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(7);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Xor(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(8);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::NXor(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(9);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::RegToFlags(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(10);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::Compare(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(11);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::SwapAdd(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(12);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::SwapSub(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(13);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::AddWithCarry(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(14);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::SubWithCarry(nibble) => {
                                 code.set_flags();
                                 code.push(11);
                                 code.push(15);
-                                code.push(nibble.as_u8());
+                                code.push(nibble.t.as_u8());
                             }
                             crate::assembly::Command::RawRamCall => {
                                 code.push(13);
@@ -655,7 +658,7 @@ impl Assembly {
                             Meta::RomPage(_) => unreachable!(),
                             Meta::RamPage => unreachable!(),
                             Meta::Label(label) => {
-                                code.label_location(label);
+                                code.label_location(label.t);
                                 // Because we could jump to here from somewhere else
                                 code.unknown_flags();
                             }

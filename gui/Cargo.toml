@@ -20,12 +20,13 @@ eframe = { version = "0.32", default-features = false, features = [
     "x11",           # To support older Linux distributions (restores one of the default features)
 ] }
 log = "0.4.27"
-egui_dnd = "0.13.0"
-i_overlay = "4.0.2"
-i_triangle = "0.36.3"
+
+assembly = { path = "../assembly", version = "0.0.1" }
+lalrpop-util = { version = "0.21.0", features = ["lexer", "unicode"] }
 
 # You only need serde if you want app persistence:
 serde = { version = "1.0.219", features = ["derive"] }
+btree-range-map = "0.7.2"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
