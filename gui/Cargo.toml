@@ -1,5 +1,5 @@
 [package]
-name = "miracle_octad_generator"
+name = "p16_tools"
 version = "0.0.0"
 authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 edition = "2024"

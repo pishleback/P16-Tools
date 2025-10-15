@@ -19,7 +19,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "eframe template",
         native_options,
-        Box::new(|cc| Ok(Box::new(miracle_octad_generator::MyApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(p16_tools::MyApp::new(cc)))),
     )
 }
 
@@ -49,7 +49,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(miracle_octad_generator::MyApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(p16_tools::MyApp::new(cc)))),
             )
             .await;
 
