@@ -1,11 +1,13 @@
-use crate::app::state::{CompileResult, State};
-use assembly::{Command, CompileSuccess, Label, WithPos, load_assembly};
+use crate::app::state::State;
+use assembly::{Command, FullCompileResult, Label, WithPos};
 use btree_range_map::RangeMap;
-use egui::{Color32, Stroke, TextBuffer, TextFormat, Visuals, text::LayoutJob};
+use egui::{
+    Color32, Pos2, RichText, Stroke, TextBuffer, TextFormat, Vec2, Visuals, text::LayoutJob,
+};
 
 pub fn update(
     state: &mut State,
-    compile_result: &CompileResult,
+    compile_result: &FullCompileResult,
     _ctx: &egui::Context,
     _frame: &mut eframe::Frame,
     ui: &mut egui::Ui,
@@ -17,14 +19,24 @@ pub fn update(
         ui.fonts(|f| f.layout_job(job))
     };
 
-    ui.add(
-        egui::TextEdit::multiline(&mut state.text)
-            .font(egui::TextStyle::Monospace)
-            .desired_rows(20)
-            .lock_focus(true)
-            .desired_width(f32::INFINITY)
-            .layouter(&mut layouter),
-    );
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, true])
+        .stick_to_bottom(false)
+        .max_height(600.0)
+        .show(ui, |ui| {
+            let output = egui::TextEdit::multiline(&mut state.text)
+                .id("assembly-text-area".into())
+                .font(egui::TextStyle::Monospace)
+                .desired_rows(20)
+                .lock_focus(true)
+                .desired_width(f32::INFINITY)
+                .layouter(&mut layouter)
+                .show(ui);
+
+            if let Some(cursor_range) = output.cursor_range {
+                println!("{:?}", cursor_range);
+            }
+        });
 }
 
 #[derive(Default, Debug)]
@@ -35,7 +47,7 @@ struct TextAttrs {
 }
 
 /// Highlights all instances of "foo" in blue.
-fn layout_job(text: &str, compile_result: &CompileResult, visuals: &Visuals) -> LayoutJob {
+fn layout_job(text: &str, result: &FullCompileResult, visuals: &Visuals) -> LayoutJob {
     let mut text_attrs = TextAttrs::default();
 
     let red_underline = Stroke {
@@ -43,8 +55,8 @@ fn layout_job(text: &str, compile_result: &CompileResult, visuals: &Visuals) -> 
         color: Color32::RED,
     };
 
-    match compile_result {
-        Ok((compile_result, assembly)) => {
+    match result {
+        Ok((result, assembly)) => {
             // Parse success; apply colouring to text
             for WithPos {
                 start,
@@ -52,10 +64,12 @@ fn layout_job(text: &str, compile_result: &CompileResult, visuals: &Visuals) -> 
                 t: line,
             } in assembly.lines_with_pos()
             {
+                // opperation code
                 text_attrs
                     .colour
                     .insert(*start..*end, visuals.strong_text_color());
 
+                // labels
                 let add_label = |text_attrs: &mut TextAttrs, label: &WithPos<Label>| {
                     text_attrs.colour.insert(
                         label.start..label.end,
@@ -63,6 +77,7 @@ fn layout_job(text: &str, compile_result: &CompileResult, visuals: &Visuals) -> 
                     );
                 };
 
+                // registers
                 let add_register =
                     |text_attrs: &mut TextAttrs, register: &WithPos<assembly::Nibble>| {
                         text_attrs.colour.insert(
@@ -73,6 +88,12 @@ fn layout_job(text: &str, compile_result: &CompileResult, visuals: &Visuals) -> 
 
                 match line {
                     assembly::Line::Command(command) => match command {
+                        assembly::Command::Raw(n) => {
+                            text_attrs.colour.insert(
+                                n.start..n.end,
+                                visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
+                            );
+                        }
                         assembly::Command::Value(v) => {
                             text_attrs.colour.insert(
                                 v.start..v.end,
@@ -120,6 +141,12 @@ fn layout_job(text: &str, compile_result: &CompileResult, visuals: &Visuals) -> 
                             );
                             add_register(&mut text_attrs, register);
                         }
+                        assembly::Command::Output(path) => {
+                            text_attrs.colour.insert(
+                                path.start..path.end,
+                                visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
+                            );
+                        }
                         _ => {}
                     },
                     assembly::Line::Meta(meta) => match meta {
@@ -146,73 +173,102 @@ fn layout_job(text: &str, compile_result: &CompileResult, visuals: &Visuals) -> 
                 }
             }
 
-            // Compile errors
-            match compile_result {
-                Ok(_) => {}
+            match result {
+                Ok((result, page_layout)) => match result {
+                    Ok(compiled) => {}
+                    Err(e) => {
+                        println!("{:?}", e);
+                        match e {
+                            assembly::CompileError::Invalid16BitValue { line } => {
+                                let line = assembly.line_with_pos(*line);
+                                match &line.t {
+                                    assembly::Line::Command(Command::Value(v)) => {
+                                        text_attrs.underline.insert(v.start..v.end, red_underline);
+                                    }
+                                    _ => {
+                                        text_attrs
+                                            .underline
+                                            .insert(line.start..line.end, red_underline);
+                                    }
+                                }
+                            }
+
+                            assembly::CompileError::MissingLabel { line, .. } => {
+                                let line = assembly.line_with_pos(*line);
+                                match &line.t {
+                                    assembly::Line::Command(Command::Jump(label))
+                                    | assembly::Line::Command(Command::Branch(_, label))
+                                    | assembly::Line::Command(Command::Call(label)) => {
+                                        text_attrs
+                                            .underline
+                                            .insert(label.start..label.end, red_underline);
+                                    }
+                                    _ => panic!(
+                                        "Other lines should not panic here since they have no label argument."
+                                    ),
+                                }
+                            }
+
+                            assembly::CompileError::JumpOrBranchToOtherPage { line } => {
+                                let line = assembly.line_with_pos(*line);
+                                match &line.t {
+                                    assembly::Line::Command(Command::Jump(label))
+                                    | assembly::Line::Command(Command::Branch(_, label)) => {
+                                        text_attrs
+                                            .underline
+                                            .insert(label.start..label.end, red_underline);
+                                    }
+                                    _ => panic!(
+                                        "Other lines should not panic here since they have no label argument."
+                                    ),
+                                }
+                            }
+                            assembly::CompileError::BadUseflagsWithBranch {
+                                branch_line,
+                                useflags_line,
+                            } => {
+                                let branch_line = assembly.line_with_pos(*branch_line);
+                                let useflags_line = assembly.line_with_pos(*useflags_line);
+                                text_attrs
+                                    .underline
+                                    .insert(branch_line.start..branch_line.end, red_underline);
+
+                                text_attrs
+                                    .underline
+                                    .insert(useflags_line.start..useflags_line.end, red_underline);
+                            }
+                            assembly::CompileError::BadUseflags { useflags_line } => {
+                                let useflags_line = assembly.line_with_pos(*useflags_line);
+                                text_attrs
+                                    .underline
+                                    .insert(useflags_line.start..useflags_line.end, red_underline);
+                            }
+                            assembly::CompileError::PageFull { page } => {
+                                for (start, end) in page_layout.get_page_text_intervals(page) {
+                                    text_attrs.underline.insert(start..end, red_underline);
+                                }
+                            }
+                        }
+                    }
+                },
                 Err(e) => {
                     println!("{:?}", e);
-
                     match e {
-                        assembly::CompileError::DuplicateLabel { line, label } => {
+                        assembly::LayoutPagesError::DuplicateLabel { line, label } => {
                             let line = assembly.line_with_pos(*line);
                             text_attrs
                                 .underline
                                 .insert(line.start..line.end, red_underline);
                         }
-                        assembly::CompileError::MissingLabel { line } => {
-                            let line = assembly.line_with_pos(*line);
-                            match &line.t {
-                                assembly::Line::Command(Command::Jump(label))
-                                | assembly::Line::Command(Command::Branch(_, label))
-                                | assembly::Line::Command(Command::Call(label)) => {
-                                    text_attrs
-                                        .underline
-                                        .insert(label.start..label.end, red_underline);
-                                }
-                                _ => panic!(
-                                    "Other lines should not panic here since they have no label argument."
-                                ),
-                            }
-                        }
-                        assembly::CompileError::MissingPageStart { line } => {
+                        assembly::LayoutPagesError::MissingPageStart { line } => {
                             let line = assembly.line_with_pos(*line);
                             text_attrs.underline.insert(0..line.end, red_underline);
-                        }
-                        assembly::CompileError::JumpOrBranchToOtherPage { line } => {
-                            let line = assembly.line_with_pos(*line);
-                            match &line.t {
-                                assembly::Line::Command(Command::Jump(label))
-                                | assembly::Line::Command(Command::Branch(_, label)) => {
-                                    text_attrs
-                                        .underline
-                                        .insert(label.start..label.end, red_underline);
-                                }
-                                _ => panic!(
-                                    "Other lines should not panic here since they have no label argument."
-                                ),
-                            }
-                        }
-                        assembly::CompileError::BadUseflags {
-                            branch_line,
-                            useflags_line,
-                        } => {
-                            let branch_line = assembly.line_with_pos(*branch_line);
-                            let useflags_line = assembly.line_with_pos(*useflags_line);
-                            text_attrs
-                                .underline
-                                .insert(branch_line.start..branch_line.end, red_underline);
-
-                            text_attrs
-                                .underline
-                                .insert(useflags_line.start..useflags_line.end, red_underline);
                         }
                     }
                 }
             }
         }
-
         Err(e) => {
-            // Parse errors
             println!("{}", e);
             match e {
                 lalrpop_util::ParseError::InvalidToken { location } => {

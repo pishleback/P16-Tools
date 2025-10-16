@@ -13,8 +13,32 @@ pub use assembly::Line;
 pub use assembly::Meta;
 pub use assembly::WithPos;
 pub use compile::compile_assembly;
+pub use compile::layout_pages;
 pub use compile::CompileError;
 pub use compile::CompileSuccess;
+pub use compile::LayoutPagesError;
+pub use compile::LayoutPagesSuccess;
 pub use datatypes::Nibble;
 pub use datatypes::OctDigit;
 pub use memory::ProgramMemory;
+pub use memory::RAM_SIZE;
+pub use memory::RAM_SIZE_NIBBLES;
+pub use compile::PageIdent;
+
+pub type FullCompileResult<'a> = Result<
+    (
+        Result<(Result<CompileSuccess, CompileError>, LayoutPagesSuccess), LayoutPagesError>,
+        Assembly,
+    ),
+    lalrpop_util::ParseError<usize, lalrpop_util::lexer::Token<'a>, &'static str>,
+>;
+
+pub fn full_compile(text: &str) -> FullCompileResult<'_> {
+    load_assembly(text).map(|assembly| {
+        (
+            layout_pages(&assembly)
+                .map(|page_layout| (compile_assembly(&page_layout), page_layout)),
+            assembly,
+        )
+    })
+}

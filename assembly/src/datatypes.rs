@@ -59,25 +59,25 @@ pub enum Nibble {
     N15,
 }
 impl Nibble {
-    pub fn new(x: u8) -> Result<Self, ()> {
+    pub fn new(x: u8) -> Option<Self> {
         match x {
-            0 => Ok(Self::N0),
-            1 => Ok(Self::N1),
-            2 => Ok(Self::N2),
-            3 => Ok(Self::N3),
-            4 => Ok(Self::N4),
-            5 => Ok(Self::N5),
-            6 => Ok(Self::N6),
-            7 => Ok(Self::N7),
-            8 => Ok(Self::N8),
-            9 => Ok(Self::N9),
-            10 => Ok(Self::N10),
-            11 => Ok(Self::N11),
-            12 => Ok(Self::N12),
-            13 => Ok(Self::N13),
-            14 => Ok(Self::N14),
-            15 => Ok(Self::N15),
-            _ => Err(()),
+            0 => Some(Self::N0),
+            1 => Some(Self::N1),
+            2 => Some(Self::N2),
+            3 => Some(Self::N3),
+            4 => Some(Self::N4),
+            5 => Some(Self::N5),
+            6 => Some(Self::N6),
+            7 => Some(Self::N7),
+            8 => Some(Self::N8),
+            9 => Some(Self::N9),
+            10 => Some(Self::N10),
+            11 => Some(Self::N11),
+            12 => Some(Self::N12),
+            13 => Some(Self::N13),
+            14 => Some(Self::N14),
+            15 => Some(Self::N15),
+            _ => None,
         }
     }
 

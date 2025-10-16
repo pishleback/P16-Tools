@@ -1,4 +1,4 @@
-use assembly::{compile_assembly, load_assembly};
+use assembly::{compile_assembly, layout_pages, load_assembly};
 use clap::Parser;
 use std::{thread::sleep, time::Duration};
 
@@ -50,7 +50,8 @@ fn main() {
 
     let source = std::fs::read_to_string(args.assembly).unwrap();
     let assembly = load_assembly(&source).unwrap();
-    let memory = compile_assembly(&assembly).unwrap().program_memory;
+    let page_layout = layout_pages(&assembly).unwrap();
+    let memory = compile_assembly(&page_layout).unwrap().program_memory;
 
     if !args.quiet {
         memory.pprint();

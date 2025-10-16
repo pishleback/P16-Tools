@@ -45,7 +45,8 @@ pub enum Condition {
 #[derive(Debug, Clone)]
 pub enum Command {
     Pass,
-    Value(WithPos<u16>),
+    Raw(WithPos<Vec<WithPos<Nibble>>>),
+    Value(WithPos<Option<u16>>), // None if out of range
     Jump(WithPos<Label>),
     Branch(WithPos<Condition>, WithPos<Label>),
     Push(WithPos<Nibble>),
@@ -96,7 +97,7 @@ pub enum Command {
 
     RawRamCall,
     Input,
-    Output(Vec<OctDigit>),
+    Output(WithPos<Vec<WithPos<OctDigit>>>),
 }
 
 #[derive(Debug, Clone)]

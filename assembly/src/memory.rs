@@ -10,26 +10,40 @@ impl RomPage {
             data: core::array::from_fn(|_i| Nibble::N0),
         }
     }
+
     pub fn get_nibble(&self, ptr: u8) -> Nibble {
         self.data[ptr as usize]
     }
+
+    pub fn nibbles(&self) -> Vec<Nibble> {
+        self.data.to_vec()
+    }
 }
+
+// max allowed = 2^16
+// max supported by in-game CPU = 2^12
+pub const RAM_SIZE: u32 = 4096;
+pub const RAM_SIZE_NIBBLES: u32 = RAM_SIZE * 4;
 
 #[derive(Debug, Clone)]
 pub struct RamMem {
-    data: [u16; 4096],
+    data: [u16; RAM_SIZE as usize],
 }
 impl RamMem {
     fn zeros() -> Self {
-        Self { data: [0; 4096] }
+        Self { data: [0; RAM_SIZE as usize] }
     }
 
     pub fn get_value(&self, addr: u16) -> u16 {
-        self.data[(addr % 4096) as usize]
+        self.data[(addr % RAM_SIZE as u16) as usize]
     }
 
     pub fn set_value(&mut self, addr: u16, value: u16) {
-        self.data[(addr % 4096) as usize] = value
+        self.data[(addr % RAM_SIZE as u16) as usize] = value
+    }
+
+    pub fn data(&self) -> &[u16; RAM_SIZE as usize] {
+        &self.data
     }
 }
 
