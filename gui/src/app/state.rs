@@ -1,15 +1,20 @@
+use std::collections::HashSet;
+
 use assembly::{FullCompileResult, Nibble, RAM_SIZE, full_compile};
 use egui::{Color32, RichText};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct State {
     pub text: String,
+    #[serde(skip)]
+    pub selected_lines: Option<HashSet<usize>>, // which lines of assembly are highlighted
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
             text: "PASS".into(),
+            selected_lines: None,
         }
     }
 }
@@ -23,7 +28,7 @@ impl State {
             .clone()
             .ok()
             .and_then(|inner| inner.0.ok().and_then(|inner| inner.0.ok()))
-            .map(|compile_success| compile_success.program_memory);
+            .map(|compile_success| compile_success.memory().clone());
 
         // Left panel with buttons
         egui::SidePanel::left("left_panel")

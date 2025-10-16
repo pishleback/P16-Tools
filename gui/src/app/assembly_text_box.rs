@@ -1,9 +1,9 @@
+use std::collections::HashSet;
+
 use crate::app::state::State;
 use assembly::{Command, FullCompileResult, Label, WithPos};
 use btree_range_map::RangeMap;
-use egui::{
-    Color32, Pos2, RichText, Stroke, TextBuffer, TextFormat, Vec2, Visuals, text::LayoutJob,
-};
+use egui::{Color32, Stroke, TextBuffer, TextFormat, Visuals, text::LayoutJob};
 
 pub fn update(
     state: &mut State,
@@ -12,9 +12,11 @@ pub fn update(
     _frame: &mut eframe::Frame,
     ui: &mut egui::Ui,
 ) {
+    let selected_lines = state.selected_lines.clone();
+
     // Define layouter closure
     let mut layouter = |ui: &egui::Ui, text: &dyn TextBuffer, wrap_width: f32| {
-        let mut job = layout_job(text.as_str(), compile_result, ui.visuals());
+        let mut job = layout_job(text.as_str(), &selected_lines, compile_result, ui.visuals());
         job.wrap.max_width = wrap_width;
         ui.fonts(|f| f.layout_job(job))
     };
@@ -33,9 +35,30 @@ pub fn update(
                 .layouter(&mut layouter)
                 .show(ui);
 
-            if let Some(cursor_range) = output.cursor_range {
-                println!("{:?}", cursor_range);
+            // select lines of assembly based on what is highlighted
+            match compile_result {
+                Ok((_, assembly)) => {
+                    if let Some(cursor_range) = output.cursor_range {
+                        let cursor_range = cursor_range.sorted_cursors();
+                        let (a, b) = (cursor_range[0].index, cursor_range[1].index);
+                        debug_assert!(a <= b);
+                        let mut selected_lines = HashSet::new();
+                        for (line_num, line) in assembly.lines_with_pos().into_iter().enumerate() {
+                            if line.start <= b && a <= line.end {
+                                selected_lines.insert(line_num);
+                            }
+                        }
+                        state.selected_lines = Some(selected_lines);
+                    } else {
+                        state.selected_lines = None;
+                    }
+                }
+                Err(_) => {
+                    state.selected_lines = None;
+                }
             }
+
+            println!("{:?}", state.selected_lines);
         });
 }
 
@@ -47,12 +70,22 @@ struct TextAttrs {
 }
 
 /// Highlights all instances of "foo" in blue.
-fn layout_job(text: &str, result: &FullCompileResult, visuals: &Visuals) -> LayoutJob {
+fn layout_job(
+    text: &str,
+    selected_lines: &Option<HashSet<usize>>,
+    result: &FullCompileResult,
+    visuals: &Visuals,
+) -> LayoutJob {
     let mut text_attrs = TextAttrs::default();
 
     let red_underline = Stroke {
         width: 1.0,
         color: Color32::RED,
+    };
+
+    let pruple_underline = Stroke {
+        width: 1.0,
+        color: Color32::PURPLE,
     };
 
     match result {
@@ -86,6 +119,7 @@ fn layout_job(text: &str, result: &FullCompileResult, visuals: &Visuals) -> Layo
                         );
                     };
 
+                // syntax highlighting
                 match line {
                     assembly::Line::Command(command) => match command {
                         assembly::Command::Raw(n) => {
@@ -175,7 +209,35 @@ fn layout_job(text: &str, result: &FullCompileResult, visuals: &Visuals) -> Layo
 
             match result {
                 Ok((result, page_layout)) => match result {
-                    Ok(compiled) => {}
+                    Ok(compiled) => {
+                        // extra highlighting for selections
+                        if let Some(selected_lines) = selected_lines {
+                            for (line_num, line) in
+                                assembly.lines_with_pos().into_iter().enumerate()
+                            {
+                                #[allow(clippy::single_match)]
+                                match &line.t {
+                                    assembly::Line::Command(_) => {}
+                                    assembly::Line::Meta(meta) => match meta {
+                                        assembly::Meta::UseFlags => {
+                                            if selected_lines.len() == 1
+                                                && selected_lines.contains(&line_num)
+                                            {
+                                                let flag_line =
+                                                    compiled.get_useflag_line(line_num).unwrap();
+                                                let flag_line = assembly.line_with_pos(flag_line);
+                                                text_attrs.underline.insert(
+                                                    flag_line.start..flag_line.end,
+                                                    pruple_underline,
+                                                );
+                                            }
+                                        }
+                                        _ => {}
+                                    },
+                                }
+                            }
+                        }
+                    }
                     Err(e) => {
                         println!("{:?}", e);
                         match e {

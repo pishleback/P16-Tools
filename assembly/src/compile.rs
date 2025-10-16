@@ -204,7 +204,8 @@ enum FlagsSetBy {
     // The flags could come from an unknown source e.g. from a jump from elsewhere
     Unknown,
     // The flags are set here
-    Nibble(u8),
+    // (flags address in page, flags line of assembly)
+    Nibble(u8, usize),
 }
 
 #[derive(Debug)]
@@ -240,8 +241,8 @@ impl<'a> MemoryPageManager<'a> {
             .map(|_f| self.flags_as_set)
             .collect();
     }
-    fn set_flags(&mut self) {
-        self.flags_as_set = FlagsSetBy::Nibble(self.ptr.unwrap());
+    fn set_flags(&mut self, line: usize) {
+        self.flags_as_set = FlagsSetBy::Nibble(self.ptr.unwrap(), line);
     }
     fn unknown_flags(&mut self) {
         self.flags_as_set = FlagsSetBy::Unknown;
@@ -256,7 +257,7 @@ impl<'a> MemoryPageManager<'a> {
             match f {
                 FlagsSetBy::Unreachable => {}
                 FlagsSetBy::Unknown => {}
-                FlagsSetBy::Nibble(l) => {
+                FlagsSetBy::Nibble(l, _) => {
                     if *l == flags_set_on {
                         return Some(i);
                     }
@@ -461,7 +462,19 @@ pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPag
 
 #[derive(Debug, Clone)]
 pub struct CompileSuccess {
-    pub program_memory: ProgramMemory,
+    program_memory: ProgramMemory,
+    useflag_lines: HashMap<usize, usize>, // point from .USEFLAG lines to the line whose flags it is using
+}
+
+impl CompileSuccess {
+    pub fn memory(&self) -> &ProgramMemory {
+        &self.program_memory
+    }
+
+    pub fn get_useflag_line(&self, useflag_line: usize) -> Option<usize> {
+        println!("{:?}", self.useflag_lines);
+        self.useflag_lines.get(&useflag_line).cloned()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -491,11 +504,12 @@ pub enum CompileError {
 pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSuccess, CompileError> {
     let pages = page_layout.pages.clone();
     let label_to_page = &page_layout.label_to_page;
+    let mut useflag_lines = HashMap::new();
 
     let mut code = MemoryManager::blank();
     for (page, lines) in pages {
         let mut code = code.new_page(page);
-        let mut useflags_line: Option<(u8, usize)> = None; // (memory location, assembly line number)
+        let mut prev_useflag_info: Option<(u8, usize, usize)> = None; // (memory location where we are using flags from, assembly line number where we are using flags from, assembly line number of the .USEFLAGS)
         for LayoutPagesLine {
             line,
             assembly_line_num: line_num,
@@ -546,58 +560,61 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                         crate::assembly::Command::Branch(condition, label) => {
                             let target_page = label_to_page.get(&label.t);
                             if target_page.is_none() {
-                                return Err(CompileError::MissingLabel { line: line_num, label });
+                                return Err(CompileError::MissingLabel {
+                                    line: line_num,
+                                    label,
+                                });
                             }
                             if page != *target_page.unwrap() {
                                 return Err(CompileError::JumpOrBranchToOtherPage {
                                     line: line_num,
                                 });
                             }
-                            match useflags_line {
-                                Some((useflags_location, useflags_assembly_line)) => {
-                                    match code.wait_for_flags(useflags_location) {
-                                        Some(delay) => {
-                                            for _ in 0..delay {
-                                                code.push(0)?;
-                                            }
+                            match prev_useflag_info {
+                                Some((
+                                    flags_location,
+                                    flags_assembly_line,
+                                    useflags_assembly_line,
+                                )) => match code.wait_for_flags(flags_location) {
+                                    Some(delay) => {
+                                        for _ in 0..delay {
+                                            code.push(0)?;
                                         }
-                                        None => {
-                                            match match code.delayed_flags_for_branch() {
-                                                FlagsSetBy::Unreachable => {
-                                                    Err("Is unreachable".to_string())
-                                                }
-                                                FlagsSetBy::Unknown => Err(
-                                                    "The flags could come from an unknown source"
-                                                        .to_string(),
-                                                ),
-                                                FlagsSetBy::Nibble(branch_line) => {
-                                                    if useflags_location != branch_line {
-                                                        Err(format!(
+                                    }
+                                    None => {
+                                        match match code.delayed_flags_for_branch() {
+                                            FlagsSetBy::Unreachable => {
+                                                Err("Is unreachable".to_string())
+                                            }
+                                            FlagsSetBy::Unknown => {
+                                                Err("The flags could come from an unknown source"
+                                                    .to_string())
+                                            }
+                                            FlagsSetBy::Nibble(branch_line, _) => {
+                                                if flags_location != branch_line {
+                                                    Err(format!(
                                                         "Actually uses flags from {branch_line}",
                                                     ))
-                                                    } else {
-                                                        Ok(())
-                                                    }
+                                                } else {
+                                                    Ok(())
                                                 }
-                                            } {
-                                                Ok(()) => {}
-                                                Err(_err) => {
-                                                    return Err(
-                                                        CompileError::BadUseflagsWithBranch {
-                                                            branch_line: line_num,
-                                                            useflags_line: useflags_assembly_line,
-                                                        },
-                                                    );
-                                                }
+                                            }
+                                        } {
+                                            Ok(()) => {}
+                                            Err(_err) => {
+                                                return Err(CompileError::BadUseflagsWithBranch {
+                                                    branch_line: line_num,
+                                                    useflags_line: useflags_assembly_line,
+                                                });
                                             }
                                         }
                                     }
-                                }
+                                },
                                 None => {
                                     //TODO: should this cause an error? Should every branch require a .USEFLAGS?
                                 }
                             }
-                            useflags_line = None;
+                            prev_useflag_info = None;
                             code.push(3)?;
                             code.push(match condition.t {
                                 crate::assembly::Condition::InputReady => 0,
@@ -631,7 +648,10 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                         crate::assembly::Command::Call(label) => {
                             let target_page = label_to_page.get(&label.t);
                             if target_page.is_none() {
-                                return Err(CompileError::MissingLabel { line: line_num, label });
+                                return Err(CompileError::MissingLabel {
+                                    line: line_num,
+                                    label,
+                                });
                             }
                             let target_page = *target_page.unwrap();
                             if page == target_page {
@@ -659,7 +679,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.unreachable_flags();
                         }
                         crate::assembly::Command::Add(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(8)?;
                             code.push(nibble.t.as_u8())?;
                         }
@@ -673,7 +693,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.push(0)?;
                         }
                         crate::assembly::Command::Not => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(1)?;
                         }
@@ -686,62 +706,62 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.push(3)?;
                         }
                         crate::assembly::Command::Increment => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(4)?;
                         }
                         crate::assembly::Command::IncrementWithCarry => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(5)?;
                         }
                         crate::assembly::Command::Decrement => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(6)?;
                         }
                         crate::assembly::Command::DecrementWithCarry => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(7)?;
                         }
                         crate::assembly::Command::Negate => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(8)?;
                         }
                         crate::assembly::Command::NegateWithCarry => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(9)?;
                         }
                         crate::assembly::Command::NoopSetFlags => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(10)?;
                         }
                         crate::assembly::Command::PopSetFlags => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(11)?;
                         }
                         crate::assembly::Command::RightShift => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(12)?;
                         }
                         crate::assembly::Command::RightShiftCarryIn => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(13)?;
                         }
                         crate::assembly::Command::RightShiftOneIn => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(14)?;
                         }
                         crate::assembly::Command::ArithmeticRightShift => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(10)?;
                             code.push(15)?;
                         }
@@ -751,7 +771,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::Sub(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(1)?;
                             code.push(nibble.t.as_u8())?;
@@ -767,73 +787,73 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::And(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(4)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::Nand(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(5)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::Or(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(6)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::Nor(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(7)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::Xor(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(8)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::NXor(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(9)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::RegToFlags(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(10)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::Compare(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(11)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::SwapAdd(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(12)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::SwapSub(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(13)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::AddWithCarry(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(14)?;
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::SubWithCarry(nibble) => {
-                            code.set_flags();
+                            code.set_flags(line_num);
                             code.push(11)?;
                             code.push(15)?;
                             code.push(nibble.t.as_u8())?;
@@ -886,8 +906,9 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 useflags_line: line_num,
                             });
                         }
-                        FlagsSetBy::Nibble(n) => {
-                            useflags_line = Some((n, line_num));
+                        FlagsSetBy::Nibble(flag_addr, flag_line_num) => {
+                            prev_useflag_info = Some((flag_addr, flag_line_num, line_num));
+                            useflag_lines.insert(line_num, flag_line_num);
                         }
                     },
                     Meta::Comment(..) => {}
@@ -899,5 +920,8 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
     let memory = code.finish();
     let program_memory = memory.finish();
 
-    Ok(CompileSuccess { program_memory })
+    Ok(CompileSuccess {
+        program_memory,
+        useflag_lines,
+    })
 }

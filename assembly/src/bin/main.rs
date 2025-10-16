@@ -51,7 +51,7 @@ fn main() {
     let source = std::fs::read_to_string(args.assembly).unwrap();
     let assembly = load_assembly(&source).unwrap();
     let page_layout = layout_pages(&assembly).unwrap();
-    let memory = compile_assembly(&page_layout).unwrap().program_memory;
+    let memory = compile_assembly(&page_layout).unwrap().memory().clone();
 
     if !args.quiet {
         memory.pprint();
