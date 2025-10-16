@@ -18,12 +18,13 @@ pub use compile::CompileError;
 pub use compile::CompileSuccess;
 pub use compile::LayoutPagesError;
 pub use compile::LayoutPagesSuccess;
+pub use compile::PageIdent;
 pub use datatypes::Nibble;
 pub use datatypes::OctDigit;
 pub use memory::ProgramMemory;
 pub use memory::RAM_SIZE;
 pub use memory::RAM_SIZE_NIBBLES;
-pub use compile::PageIdent;
+pub use simulator::Simulator;
 
 pub type FullCompileResult<'a> = Result<
     (

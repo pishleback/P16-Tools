@@ -68,7 +68,7 @@ fn main() {
             println!("{addr:?} {value:?}");
         }));
 
-        let input = sim.input();
+        let input = sim.input_queue();
         std::thread::spawn(move || {
             if let Some(inputs) = args.inputs {
                 for val in inputs {

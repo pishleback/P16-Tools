@@ -3,8 +3,6 @@ use crate::memory::ProgramMemory;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
-    thread::sleep,
-    time::Duration,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -95,8 +93,9 @@ fn noop_get_flags(a: u16) -> AluFlags {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum EndStepOkState {
+pub enum EndStepOkState {
     Continue,
+    WaitingForInput,
     Finish,
 }
 
@@ -170,8 +169,12 @@ impl Simulator {
         self.output_targets.push(callback);
     }
 
-    pub fn input(&mut self) -> Arc<Mutex<InputQueue>> {
+    pub fn input_queue(&mut self) -> Arc<Mutex<InputQueue>> {
         self.input_queue.clone()
+    }
+
+    pub fn input_value(&mut self, value: u16) {
+        self.input_queue.lock().unwrap().push(value);
     }
 
     fn set_flags(&mut self, flags: AluFlags, past: usize) {
@@ -212,11 +215,15 @@ impl Simulator {
         self.data_stack.pop().unwrap_or(0)
     }
 
+    pub fn get_reg(& self, reg: Nibble) ->  u16 {
+        self.registers[reg.as_usize()]
+    }
+
     fn get_reg_mut(&mut self, reg: Nibble) -> &mut u16 {
         &mut self.registers[reg.as_usize()]
     }
 
-    fn step(&mut self, log_instructions: bool) -> Result<EndStepOkState, EndErrorState> {
+    pub fn step(&mut self, log_instructions: bool) -> Result<EndStepOkState, EndErrorState> {
         let opcode = self.read_pcache();
         match opcode {
             Nibble::N0 => {
@@ -397,7 +404,7 @@ impl Simulator {
                             println!("Read");
                         }
                         let x = self.pop_data_stack();
-                        self.input()
+                        self.input_queue
                             .lock()
                             .unwrap()
                             .push(self.memory.ram_mut().get_value(x));
@@ -408,7 +415,7 @@ impl Simulator {
                             println!("Read and Pop");
                         }
                         let x = self.pop_data_stack();
-                        self.input()
+                        self.input_queue
                             .lock()
                             .unwrap()
                             .push(self.memory.ram_mut().get_value(x));
@@ -744,18 +751,13 @@ impl Simulator {
                 if log_instructions {
                     println!("Input");
                 }
-                self.increment();
-                loop {
-                    let val_opt = self.input_queue.lock().unwrap().pop();
-                    match val_opt {
-                        Some(val) => {
-                            self.push_data_stack(val)?;
-                            break;
-                        }
-                        None => {
-                            sleep(Duration::from_millis(10));
-                        }
-                    }
+
+                let val_opt = self.input_queue.lock().unwrap().pop();
+                if let Some(val) = val_opt {
+                    self.increment();
+                    self.push_data_stack(val)?;
+                } else {
+                    return Ok(EndStepOkState::WaitingForInput);
                 }
             }
             Nibble::N15 => {
@@ -786,20 +788,20 @@ impl Simulator {
     pub fn run(&mut self, log_instructions: bool, log_state: bool) -> Result<(), EndErrorState> {
         loop {
             let result = self.step(log_instructions)?;
-            let mut flags = vec![];
-            if self.flags.zero {
-                flags.push("Z");
-            }
-            if self.flags.negative {
-                flags.push("N");
-            }
-            if self.flags.overflow {
-                flags.push("V");
-            }
-            if self.flags.carry {
-                flags.push("C");
-            }
             if log_state {
+                let mut flags = vec![];
+                if self.flags.zero {
+                    flags.push("Z");
+                }
+                if self.flags.negative {
+                    flags.push("N");
+                }
+                if self.flags.overflow {
+                    flags.push("V");
+                }
+                if self.flags.carry {
+                    flags.push("C");
+                }
                 println!(
                     "    {:?} {:?} {:?} {:?}",
                     self.program_counter,
@@ -815,6 +817,9 @@ impl Simulator {
                 EndStepOkState::Continue => {}
                 EndStepOkState::Finish => {
                     break;
+                }
+                EndStepOkState::WaitingForInput => {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
             }
         }

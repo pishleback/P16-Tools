@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use assembly::{FullCompileResult, Nibble, RAM_SIZE, full_compile};
+use assembly::{FullCompileResult, Nibble, RAM_SIZE, Simulator, full_compile};
 use egui::{Color32, RichText};
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -8,6 +8,8 @@ pub struct State {
     pub text: String,
     #[serde(skip)]
     pub selected_lines: Option<HashSet<usize>>, // which lines of assembly are highlighted
+    #[serde(skip)]
+    pub simulator: Option<(String, Simulator)>,
 }
 
 impl Default for State {
@@ -15,6 +17,7 @@ impl Default for State {
         Self {
             text: "PASS".into(),
             selected_lines: None,
+            simulator: None,
         }
     }
 }
@@ -29,6 +32,17 @@ impl State {
             .ok()
             .and_then(|inner| inner.0.ok().and_then(|inner| inner.0.ok()))
             .map(|compile_success| compile_success.memory().clone());
+
+        if let Some((simulator_source, _)) = &self.simulator
+            && simulator_source != &source
+        {
+            self.simulator = None;
+        }
+        if self.simulator.is_none() {
+            self.simulator = compiled_memory
+                .clone()
+                .map(|m| (source.clone(), m.simulator()));
+        }
 
         // Left panel with buttons
         egui::SidePanel::left("left_panel")
@@ -74,12 +88,25 @@ JUMP or BRANCH to a different page is not possible. Use CALL to chage pages.",
                                     }
                                     assembly::CompileError::BadUseflagsWithBranch { .. } => {
                                         ui.label(
-                                            RichText::new("BadUseflagsWithBranch")
-                                                .color(Color32::RED),
+                                            RichText::new(
+                                                "\
+BRANCH does not use flags at .USEFLAGS and it is not \
+possible to fix with extra PASS instructions.",
+                                            )
+                                            .color(Color32::RED),
                                         );
                                     }
                                     assembly::CompileError::BadUseflags { .. } => {
                                         ui.label(RichText::new("BadUseflags").color(Color32::RED));
+                                    }
+                                    assembly::CompileError::BranchWithoutUseflags { .. } => {
+                                        ui.label(
+                                            RichText::new(
+                                                "\
+BRANCH instructions require a .USEFLAGS to ensure the correct flags are used.",
+                                            )
+                                            .color(Color32::RED),
+                                        );
                                     }
                                     assembly::CompileError::PageFull { page } => match page {
                                         assembly::PageIdent::Rom(nibble) => {
@@ -213,15 +240,74 @@ Missing page definition. Add `..ROM <page>` or `..RAM` before instructions."
                         });
                     }
 
-                    egui::CollapsingHeader::new("Simulator").show(ui, |ui| {
-                        ui.columns(3, |ui| {
-                            ui[0].label("Column 111111");
-                            ui[1].label("Column 2");
-                            ui[2].label("Column 3");
-                        });
+                    if self.simulator.is_some() {
+                        egui::CollapsingHeader::new("Simulator").show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                if ui.button("Reset").clicked() {
+                                    self.simulator = None;
+                                }
+                            });
 
-                        ui.label("TODO: Simulator");
-                    });
+                            if let Some((_, simulator)) = self.simulator.as_mut() {
+                                let result = simulator.step(true);
+                                println!("{:?}", result);
+
+                                if ui.button("input 3333").clicked() {
+                                    simulator.input_value(3333);
+                                }
+
+                                egui::CollapsingHeader::new("Registers").show(ui, |ui| {
+                                    for reg in 0..16 {
+                                        let reg = Nibble::new(reg).unwrap();
+                                        show_16bit_value(
+                                            ui,
+                                            format!("%{}", reg.hex_str()),
+                                            simulator.get_reg(reg),
+                                        );
+                                    }
+                                });
+
+                                fn show_16bit_value(ui: &mut egui::Ui, label: String, value: u16) {
+                                    let box_size = egui::vec2(16.0, 16.0);
+
+                                    // temporarily override spacing inside this scope
+                                    let old_spacing = ui.spacing().item_spacing;
+                                    ui.spacing_mut().item_spacing = egui::vec2(2.0, 0.0); // very small horizontal spacing
+
+                                    // draw the bits
+                                    ui.horizontal(|ui| {
+                                        ui.label(
+                                            RichText::new(label)
+                                                .text_style(egui::TextStyle::Monospace),
+                                        );
+                                        for i in (0..16).rev() {
+                                            // MSB on the left
+                                            let bit_on = (value >> i) & 1 == 1;
+                                            let color = if bit_on {
+                                                ui.visuals().strong_text_color()
+                                            } else {
+                                                ui.visuals().code_bg_color
+                                            };
+
+                                            let (rect, _response) = ui.allocate_exact_size(
+                                                box_size,
+                                                egui::Sense::hover(),
+                                            );
+                                            ui.painter().rect_filled(rect, 2.0, color);
+                                            ui.painter().rect_stroke(
+                                                rect,
+                                                2.0,
+                                                egui::Stroke::new(1.0, egui::Color32::BLACK),
+                                                egui::StrokeKind::Middle,
+                                            );
+                                        }
+                                    });
+
+                                    ui.spacing_mut().item_spacing = old_spacing;
+                                }
+                            }
+                        });
+                    }
                 });
         });
     }

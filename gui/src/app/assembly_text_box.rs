@@ -57,8 +57,6 @@ pub fn update(
                     state.selected_lines = None;
                 }
             }
-
-            println!("{:?}", state.selected_lines);
         });
 }
 
@@ -79,12 +77,12 @@ fn layout_job(
     let mut text_attrs = TextAttrs::default();
 
     let red_underline = Stroke {
-        width: 1.0,
+        width: 1.5,
         color: Color32::RED,
     };
 
-    let pruple_underline = Stroke {
-        width: 1.0,
+    let purple_underline = Stroke {
+        width: 1.5,
         color: Color32::PURPLE,
     };
 
@@ -217,19 +215,58 @@ fn layout_job(
                             {
                                 #[allow(clippy::single_match)]
                                 match &line.t {
-                                    assembly::Line::Command(_) => {}
+                                    assembly::Line::Command(command) => match command {
+                                        Command::Branch(_, _) => {
+                                            if selected_lines.len() == 1
+                                                && selected_lines.contains(&line_num)
+                                            {
+                                                let useflag_line_num =
+                                                    compiled.useflag_from_branch(line_num).unwrap();
+                                                let useflag_line =
+                                                    assembly.line_with_pos(useflag_line_num);
+                                                text_attrs.underline.insert(
+                                                    useflag_line.start..useflag_line.end,
+                                                    purple_underline,
+                                                );
+                                                let flag_lines = compiled
+                                                    .flag_setters_from_useflag(useflag_line_num)
+                                                    .unwrap();
+                                                let flag_lines = flag_lines
+                                                    .into_iter()
+                                                    .map(|flag_line| {
+                                                        assembly.line_with_pos(flag_line)
+                                                    })
+                                                    .collect::<Vec<_>>();
+                                                for flag_line in flag_lines {
+                                                    text_attrs.underline.insert(
+                                                        flag_line.start..flag_line.end,
+                                                        purple_underline,
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    },
                                     assembly::Line::Meta(meta) => match meta {
                                         assembly::Meta::UseFlags => {
                                             if selected_lines.len() == 1
                                                 && selected_lines.contains(&line_num)
                                             {
-                                                let flag_line =
-                                                    compiled.get_useflag_line(line_num).unwrap();
-                                                let flag_line = assembly.line_with_pos(flag_line);
-                                                text_attrs.underline.insert(
-                                                    flag_line.start..flag_line.end,
-                                                    pruple_underline,
-                                                );
+                                                let flag_lines = compiled
+                                                    .flag_setters_from_useflag(line_num)
+                                                    .unwrap();
+                                                let flag_lines = flag_lines
+                                                    .into_iter()
+                                                    .map(|flag_line| {
+                                                        assembly.line_with_pos(flag_line)
+                                                    })
+                                                    .collect::<Vec<_>>();
+                                                for flag_line in flag_lines {
+                                                    text_attrs.underline.insert(
+                                                        flag_line.start..flag_line.end,
+                                                        purple_underline,
+                                                    );
+                                                }
                                             }
                                         }
                                         _ => {}
@@ -294,7 +331,6 @@ fn layout_job(
                                 text_attrs
                                     .underline
                                     .insert(branch_line.start..branch_line.end, red_underline);
-
                                 text_attrs
                                     .underline
                                     .insert(useflags_line.start..useflags_line.end, red_underline);
@@ -304,6 +340,12 @@ fn layout_job(
                                 text_attrs
                                     .underline
                                     .insert(useflags_line.start..useflags_line.end, red_underline);
+                            }
+                            assembly::CompileError::BranchWithoutUseflags { branch_line } => {
+                                let branch_line = assembly.line_with_pos(*branch_line);
+                                text_attrs
+                                    .underline
+                                    .insert(branch_line.start..branch_line.end, red_underline);
                             }
                             assembly::CompileError::PageFull { page } => {
                                 for (start, end) in page_layout.get_page_text_intervals(page) {

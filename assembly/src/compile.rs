@@ -143,8 +143,8 @@ impl MemoryManager {
             page,
             page_ident,
             ptr,
-            flags_as_set: FlagsSetBy::Unknown,
-            flags_delay_queue: (0..6).map(|_i| FlagsSetBy::Unknown).collect(),
+            flags_as_set: FlagsState { sources: vec![] },
+            flags_delay_queue: (0..6).map(|_i| FlagsState { sources: vec![] }).collect(),
         }
     }
     fn finish(mut self) -> Memory {
@@ -197,15 +197,14 @@ impl MemoryManager {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum FlagsSetBy {
-    // Nothing can set the flags because it is unreachable e.g. RETURN just before
-    Unreachable,
-    // The flags could come from an unknown source e.g. from a jump from elsewhere
-    Unknown,
-    // The flags are set here
-    // (flags address in page, flags line of assembly)
-    Nibble(u8, usize),
+// represent the possible states of part of the flag bus at a given moment in time
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FlagsState {
+    // List of places whre the flags could have been set
+    // Vec<(flags address in page, flags line of assembly)>
+    // In the order in which they appear
+    sources: Vec<(u8, usize)>,
 }
 
 #[derive(Debug)]
@@ -215,8 +214,9 @@ struct MemoryPageManager<'a> {
     page_ident: PageIdent,
     ptr: Option<u8>, // None once full
     // Current start of the flags as
-    flags_as_set: FlagsSetBy,
-    flags_delay_queue: VecDeque<FlagsSetBy>,
+    flags_as_set: FlagsState,
+    // .front() is straight out the ALU and .back() is as seen by a branch
+    flags_delay_queue: VecDeque<FlagsState>,
 }
 impl<'a> MemoryPageManager<'a> {
     fn nibble_ptr(&self) -> MemNibblePtr {
@@ -227,41 +227,50 @@ impl<'a> MemoryPageManager<'a> {
             }
         }
     }
-    fn delayed_flags_for_branch(&self) -> FlagsSetBy {
-        *self.flags_delay_queue.back().unwrap()
+    fn current_flags_branch_pov(&self) -> FlagsState {
+        self.flags_delay_queue.back().unwrap().clone()
     }
     fn tick_flags_delay(&mut self) {
-        self.flags_delay_queue.push_front(self.flags_as_set);
+        self.flags_delay_queue.push_front(self.flags_as_set.clone());
         self.flags_delay_queue.pop_back().unwrap();
     }
     fn flush_flags(&mut self) {
         self.flags_delay_queue = self
             .flags_delay_queue
             .iter()
-            .map(|_f| self.flags_as_set)
+            .map(|_f| self.flags_as_set.clone())
             .collect();
     }
+    // overwrite the current flags out of the ALU
     fn set_flags(&mut self, line: usize) {
-        self.flags_as_set = FlagsSetBy::Nibble(self.ptr.unwrap(), line);
+        self.flags_as_set = FlagsState {
+            sources: vec![(self.ptr.unwrap(), line)],
+        }
     }
-    fn unknown_flags(&mut self) {
-        self.flags_as_set = FlagsSetBy::Unknown;
-        self.flush_flags();
+    // populate the flag queue with flags which could also be set here
+    fn set_possible_flushed_flags(&mut self, line: usize) {
+        let flag_state = (self.ptr.unwrap(), line);
+        self.flags_as_set.sources.push(flag_state);
+        for entry in &mut self.flags_delay_queue {
+            entry.sources.push(flag_state);
+        }
     }
     fn unreachable_flags(&mut self) {
-        self.flags_as_set = FlagsSetBy::Unreachable;
+        self.flags_as_set = FlagsState { sources: vec![] };
         self.flush_flags();
     }
-    fn wait_for_flags(&mut self, flags_set_on: u8) -> Option<usize> {
-        for (i, f) in self.flags_delay_queue.iter().rev().enumerate() {
-            match f {
-                FlagsSetBy::Unreachable => {}
-                FlagsSetBy::Unknown => {}
-                FlagsSetBy::Nibble(l, _) => {
-                    if *l == flags_set_on {
-                        return Some(i);
-                    }
-                }
+    // how much delay must be added for flags set at <flags_set_on> to be useable in a branch instruction
+    // return None if no ammount of delay will do the trick, e.g. if something else has long since overwritten the flags
+    fn wait_for_flags(&mut self, flags: &FlagsState) -> Option<usize> {
+        for (i, flags_after_i) in self
+            .flags_delay_queue
+            .iter()
+            .rev()
+            .chain(vec![&self.flags_as_set])
+            .enumerate()
+        {
+            if flags == flags_after_i {
+                return Some(i);
             }
         }
         None
@@ -463,7 +472,8 @@ pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPag
 #[derive(Debug, Clone)]
 pub struct CompileSuccess {
     program_memory: ProgramMemory,
-    useflag_lines: HashMap<usize, usize>, // point from .USEFLAG lines to the line whose flags it is using
+    useflag_lines: HashMap<usize, Vec<usize>>, // point from .USEFLAG lines to the line whose flags it could be using
+    branch_lines: HashMap<usize, usize>,       // point from BRANCH to the .USEFLAG line it is using
 }
 
 impl CompileSuccess {
@@ -471,9 +481,12 @@ impl CompileSuccess {
         &self.program_memory
     }
 
-    pub fn get_useflag_line(&self, useflag_line: usize) -> Option<usize> {
-        println!("{:?}", self.useflag_lines);
+    pub fn flag_setters_from_useflag(&self, useflag_line: usize) -> Option<Vec<usize>> {
         self.useflag_lines.get(&useflag_line).cloned()
+    }
+
+    pub fn useflag_from_branch(&self, branch_line: usize) -> Option<usize> {
+        self.branch_lines.get(&branch_line).cloned()
     }
 }
 
@@ -496,6 +509,9 @@ pub enum CompileError {
     BadUseflags {
         useflags_line: usize,
     },
+    BranchWithoutUseflags {
+        branch_line: usize,
+    },
     PageFull {
         page: PageIdent,
     },
@@ -504,12 +520,14 @@ pub enum CompileError {
 pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSuccess, CompileError> {
     let pages = page_layout.pages.clone();
     let label_to_page = &page_layout.label_to_page;
-    let mut useflag_lines = HashMap::new();
+
+    let mut useflag_lines: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut branch_lines: HashMap<usize, usize> = HashMap::new();
 
     let mut code = MemoryManager::blank();
     for (page, lines) in pages {
         let mut code = code.new_page(page);
-        let mut prev_useflag_info: Option<(u8, usize, usize)> = None; // (memory location where we are using flags from, assembly line number where we are using flags from, assembly line number of the .USEFLAGS)
+        let mut useflag_saved_flag_state: Option<(FlagsState, usize)> = None; // (place where flags were set, assembly line of .USEFLAGS)
         for LayoutPagesLine {
             line,
             assembly_line_num: line_num,
@@ -542,6 +560,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.push(a)?;
                         }
                         crate::assembly::Command::Jump(label) => {
+                            code.unreachable_flags();
                             let target_page = label_to_page.get(&label.t);
                             if target_page.is_none() {
                                 return Err(CompileError::MissingLabel {
@@ -570,38 +589,18 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     line: line_num,
                                 });
                             }
-                            match prev_useflag_info {
-                                Some((
-                                    flags_location,
-                                    flags_assembly_line,
-                                    useflags_assembly_line,
-                                )) => match code.wait_for_flags(flags_location) {
-                                    Some(delay) => {
-                                        for _ in 0..delay {
-                                            code.push(0)?;
+                            match useflag_saved_flag_state {
+                                Some((flags, useflags_assembly_line)) => {
+                                    match code.wait_for_flags(&flags) {
+                                        Some(delay) => {
+                                            for _ in 0..delay {
+                                                code.push(0)?;
+                                            }
                                         }
-                                    }
-                                    None => {
-                                        match match code.delayed_flags_for_branch() {
-                                            FlagsSetBy::Unreachable => {
-                                                Err("Is unreachable".to_string())
-                                            }
-                                            FlagsSetBy::Unknown => {
-                                                Err("The flags could come from an unknown source"
-                                                    .to_string())
-                                            }
-                                            FlagsSetBy::Nibble(branch_line, _) => {
-                                                if flags_location != branch_line {
-                                                    Err(format!(
-                                                        "Actually uses flags from {branch_line}",
-                                                    ))
-                                                } else {
-                                                    Ok(())
-                                                }
-                                            }
-                                        } {
-                                            Ok(()) => {}
-                                            Err(_err) => {
+                                        None => {
+                                            let current_branch_flags =
+                                                code.current_flags_branch_pov();
+                                            if flags != current_branch_flags {
                                                 return Err(CompileError::BadUseflagsWithBranch {
                                                     branch_line: line_num,
                                                     useflags_line: useflags_assembly_line,
@@ -609,12 +608,17 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                             }
                                         }
                                     }
-                                },
+                                    branch_lines.insert(line_num, useflags_assembly_line);
+                                }
                                 None => {
-                                    //TODO: should this cause an error? Should every branch require a .USEFLAGS?
+                                    // all branches require a .USEFLAGS first
+                                    return Err(CompileError::BranchWithoutUseflags {
+                                        branch_line: line_num,
+                                    });
                                 }
                             }
-                            prev_useflag_info = None;
+                            debug_assert!(branch_lines.contains_key(&line_num));
+                            useflag_saved_flag_state = None;
                             code.push(3)?;
                             code.push(match condition.t {
                                 crate::assembly::Condition::InputReady => 0,
@@ -646,6 +650,8 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::Call(label) => {
+                            code.set_possible_flushed_flags(line_num);
+                            code.flush_flags();
                             let target_page = label_to_page.get(&label.t);
                             if target_page.is_none() {
                                 return Err(CompileError::MissingLabel {
@@ -672,11 +678,10 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     }
                                 }
                             }
-                            code.unknown_flags();
                         }
                         crate::assembly::Command::Return => {
-                            code.push(7)?;
                             code.unreachable_flags();
+                            code.push(7)?;
                         }
                         crate::assembly::Command::Add(nibble) => {
                             code.set_flags(line_num);
@@ -859,12 +864,13 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.push(nibble.t.as_u8())?;
                         }
                         crate::assembly::Command::RawRamCall => {
+                            code.set_possible_flushed_flags(line_num);
+                            code.flush_flags();
                             code.push(13)?;
-                            code.unknown_flags();
                         }
                         crate::assembly::Command::Input => {
                             code.push(14)?;
-                            code.unknown_flags(); //Not sure what happens here
+                            // In terms of flags, we can progress them by some fixed ammount since Input always takes some delay. Not sure how much that amount is without checking in game. It could be a full flush?
                         }
                         crate::assembly::Command::Output(vec) => {
                             code.push(15)?;
@@ -880,8 +886,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     },
                                 )?;
                             }
-                            // Because the output instruction may pause if the output is blocked, we don't know what the flags will be
-                            code.unknown_flags();
+                            // Can't flush flags. Output instructions may or may not block.
                         }
                     }
                 }
@@ -889,28 +894,16 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                     Meta::RomPage(_) => unreachable!(),
                     Meta::RamPage => unreachable!(),
                     Meta::Label(label) => {
+                        code.set_possible_flushed_flags(line_num);
                         code.label_location(label.t)?;
-                        // Because we could jump to here from somewhere else
-                        code.unknown_flags();
                     }
-                    Meta::UseFlags => match code.flags_as_set {
-                        FlagsSetBy::Unreachable => {
-                            //.USEFLAGS is unreachable
-                            return Err(CompileError::BadUseflags {
-                                useflags_line: line_num,
-                            });
-                        }
-                        FlagsSetBy::Unknown => {
-                            //.USEFLAGS has unknown origin for flag
-                            return Err(CompileError::BadUseflags {
-                                useflags_line: line_num,
-                            });
-                        }
-                        FlagsSetBy::Nibble(flag_addr, flag_line_num) => {
-                            prev_useflag_info = Some((flag_addr, flag_line_num, line_num));
-                            useflag_lines.insert(line_num, flag_line_num);
-                        }
-                    },
+                    Meta::UseFlags => {
+                        useflag_saved_flag_state = Some((code.flags_as_set.clone(), line_num));
+                        useflag_lines.insert(
+                            line_num,
+                            code.flags_as_set.sources.iter().map(|x| x.1).collect(),
+                        );
+                    }
                     Meta::Comment(..) => {}
                 },
             }
@@ -923,5 +916,6 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
     Ok(CompileSuccess {
         program_memory,
         useflag_lines,
+        branch_lines,
     })
 }
