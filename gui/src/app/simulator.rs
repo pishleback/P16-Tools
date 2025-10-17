@@ -10,7 +10,7 @@ enum SimulatorEndState {
     Error(EndErrorState),
 }
 
-struct SimulatorState {
+pub struct SimulatorState {
     simulator: Arc<Mutex<Simulator>>,
     instructions_per_second: Arc<Mutex<f64>>,
     instructions_to_do: Arc<Mutex<f64>>,
@@ -118,7 +118,7 @@ impl SimulatorState {
         self.simulator.lock().unwrap().get_reg(nibble)
     }
 
-    fn get_pc(&self) -> ProgramPtr {
+    pub fn get_pc(&self) -> ProgramPtr {
         self.simulator.lock().unwrap().get_pc()
     }
 
@@ -175,6 +175,10 @@ impl State {
 
     fn instructions_per_second_from_sim_speed_slider(t: f64) -> f64 {
         if t <= 0.0 { 0.0 } else { 10f64.powf(9.0 * t) }
+    }
+
+    pub fn simulator(&self) -> Option<&SimulatorState> {
+        self.simulator.as_ref()
     }
 }
 

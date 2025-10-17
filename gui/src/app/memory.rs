@@ -1,4 +1,5 @@
 use crate::app::state::State;
+use assembly::ProgramPagePtr;
 use assembly::{CompiledLine, FullCompileResult, Nibble};
 use egui::{Color32, TextBuffer, TextFormat, Ui, Visuals, text::LayoutJob};
 use std::collections::HashSet;
@@ -12,6 +13,14 @@ pub fn update(
 ) {
     if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
         let raw_memory = compiled.memory().clone();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let pc = state
+            .simulator
+            .simulator()
+            .map(|simulator| simulator.get_pc());
+        #[cfg(target_arch = "wasm32")]
+        let pc = None;
 
         egui::CollapsingHeader::new("Memory").show(ui, |ui| {
             // Show ROM pages
@@ -27,6 +36,16 @@ pub fn update(
                                 nibbles,
                                 lines,
                                 state.selected_lines.as_ref().unwrap_or(&HashSet::new()),
+                                pc.and_then(|ptr| match ptr.page {
+                                    ProgramPagePtr::Rom { page } => {
+                                        if page == rom_page {
+                                            Some(ptr.counter)
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    ProgramPagePtr::Ram { .. } => None,
+                                }),
                             );
                         },
                     );
@@ -44,6 +63,16 @@ pub fn update(
                             nibbles,
                             lines,
                             state.selected_lines.as_ref().unwrap_or(&HashSet::new()),
+                            pc.and_then(|ptr| match ptr.page {
+                                ProgramPagePtr::Rom { .. } => None,
+                                ProgramPagePtr::Ram { addr } => {
+                                    if addr == ram_page.start {
+                                        Some(ptr.counter)
+                                    } else {
+                                        None
+                                    }
+                                }
+                            }),
                         );
                     });
                 }
@@ -84,11 +113,12 @@ fn page(
     nibbles: Vec<Nibble>,
     lines: &Vec<CompiledLine>,
     selected_assembly: &HashSet<usize>,
+    pc: Option<u8>,
 ) {
     let mut nibbles = nibbles.iter().map(|n| n.hex_str()).collect::<String>();
 
     let mut layouter = |ui: &egui::Ui, text: &dyn TextBuffer, wrap_width: f32| {
-        let mut job = layout_job(text.as_str(), ui.visuals(), lines, selected_assembly);
+        let mut job = layout_job(text.as_str(), ui.visuals(), lines, selected_assembly, pc);
         job.wrap.max_width = wrap_width;
         ui.fonts(|f| f.layout_job(job))
     };
@@ -109,6 +139,7 @@ fn layout_job(
     visuals: &Visuals,
     lines: &Vec<CompiledLine>,
     selected_assembly: &HashSet<usize>,
+    pc: Option<u8>,
 ) -> LayoutJob {
     let mut job = LayoutJob::default();
     let mut i = 0;
@@ -154,6 +185,10 @@ fn layout_job(
                 TextFormat {
                     color: if selected_assembly.contains(assembly_line_num) {
                         selected_colour
+                    } else if pc.is_some_and(|pc| {
+                        (*page_start <= pc as usize) && ((pc as usize) < *page_end)
+                    }) {
+                        visuals.strong_text_color()
                     } else {
                         visuals.text_color()
                     },
