@@ -2,6 +2,7 @@ use assembly::{FullCompileResult, full_compile};
 use egui::{Color32, RichText};
 use std::collections::HashSet;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::app::simulator;
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -9,6 +10,7 @@ pub struct State {
     pub source: String,
     #[serde(skip)]
     pub selected_lines: Option<HashSet<usize>>, // which lines of assembly are highlighted
+    #[cfg(not(target_arch = "wasm32"))]
     pub simulator: simulator::State,
 }
 
@@ -17,8 +19,10 @@ impl Default for State {
         let mut state = Self {
             source: "".into(),
             selected_lines: None,
+            #[cfg(not(target_arch = "wasm32"))]
             simulator: simulator::State::default(),
         };
+        #[cfg(not(target_arch = "wasm32"))]
         state.simulator.update_source(&state.source);
         state
     }
@@ -179,7 +183,8 @@ Missing page definition. Add `..ROM <page>` or `..RAM` before instructions."
                     });
 
                     super::memory::update(&compile_result, ctx, frame, ui);
-
+                    
+                    #[cfg(not(target_arch = "wasm32"))]
                     if self.simulator.is_compiled() {
                         egui::CollapsingHeader::new("Simulator").show(ui, |ui| {
                             simulator::update(&mut self.simulator, ctx, frame, ui);
