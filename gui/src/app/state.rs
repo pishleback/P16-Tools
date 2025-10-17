@@ -1,7 +1,6 @@
 use assembly::{FullCompileResult, full_compile};
 use egui::{Color32, RichText};
 use std::collections::HashSet;
-
 #[cfg(not(target_arch = "wasm32"))]
 use crate::app::simulator;
 
@@ -39,6 +38,7 @@ impl State {
             .and_then(|inner| inner.0.ok().and_then(|inner| inner.0.ok()))
             .map(|compile_success| compile_success.memory().clone());
 
+        #[cfg(not(target_arch = "wasm32"))]
         self.simulator.update_source(&source);
 
         // Left panel with buttons
