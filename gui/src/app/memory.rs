@@ -20,7 +20,7 @@ pub fn update(
             .simulator()
             .map(|simulator| simulator.get_pc());
         #[cfg(target_arch = "wasm32")]
-        let pc = None;
+        let pc: Option<assembly::ProgramPtr> = None;
 
         egui::CollapsingHeader::new("Memory").show(ui, |ui| {
             // Show ROM pages
