@@ -1,8 +1,8 @@
+#[cfg(not(target_arch = "wasm32"))]
+use crate::app::simulator;
 use assembly::{FullCompileResult, full_compile};
 use egui::{Color32, RichText};
 use std::collections::HashSet;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::app::simulator;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct State {
@@ -182,8 +182,8 @@ Missing page definition. Add `..ROM <page>` or `..RAM` before instructions."
                         super::assembly::update(self, &compile_result, ctx, frame, ui);
                     });
 
-                    super::memory::update(&compile_result, ctx, frame, ui);
-                    
+                    super::memory::update(self, &compile_result, ctx, frame, ui);
+
                     #[cfg(not(target_arch = "wasm32"))]
                     if self.simulator.is_compiled() {
                         egui::CollapsingHeader::new("Simulator").show(ui, |ui| {

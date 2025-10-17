@@ -16,6 +16,7 @@ pub use compile::compile_assembly;
 pub use compile::layout_pages;
 pub use compile::CompileError;
 pub use compile::CompileSuccess;
+pub use compile::CompiledLine;
 pub use compile::LayoutPagesError;
 pub use compile::LayoutPagesLine;
 pub use compile::LayoutPagesSuccess;

@@ -14,7 +14,6 @@ pub fn update(
 ) {
     let selected_lines = state.selected_lines.clone();
 
-    // Define layouter closure
     let mut layouter = |ui: &egui::Ui, text: &dyn TextBuffer, wrap_width: f32| {
         let mut job = layout_job(text.as_str(), &selected_lines, compile_result, ui.visuals());
         job.wrap.max_width = wrap_width;

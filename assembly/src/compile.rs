@@ -469,6 +469,15 @@ pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPag
     })
 }
 
+#[derive(Debug, Clone)]
+pub struct CompiledLine {
+    pub line: WithPos<Line>,
+    pub assembly_line_num: usize, //the index of the line in the assembly (not the same as line #)
+    // where in the program page does it appear
+    pub page_start: usize,
+    pub page_end: usize,
+}
+
 // The location in RAM of a ..RAM page
 #[derive(Debug, Clone)]
 pub struct RamPageLocation {
@@ -480,6 +489,8 @@ pub struct RamPageLocation {
 pub struct CompileSuccess {
     program_memory: ProgramMemory,
     ram_pages: Vec<RamPageLocation>, // One for each PageIdent::Ram(#) in the page layout i.e. one for each ..RAM section in the assembly in the same order as they appear
+    rom_lines: [Vec<CompiledLine>; 16],
+    ram_lines: Vec<Vec<CompiledLine>>, // outer vec bijects with the ..RAM pages
     useflag_lines: HashMap<usize, Vec<usize>>, // point from .USEFLAG lines to the line whose flags it could be using
     branch_lines: HashMap<usize, usize>,       // point from BRANCH to the .USEFLAG line it is using
 }
@@ -489,8 +500,16 @@ impl CompileSuccess {
         &self.program_memory
     }
 
-    pub fn ram_page(&self, ident: usize) -> RamPageLocation {
-        self.ram_pages[ident].clone()
+    pub fn ram_pages(&self) -> Vec<RamPageLocation> {
+        self.ram_pages.clone()
+    }
+
+    pub fn rom_lines(&self, page: Nibble) -> &Vec<CompiledLine> {
+        &self.rom_lines[page.as_usize()]
+    }
+
+    pub fn ram_lines(&self, ident: usize) -> &Vec<CompiledLine> {
+        &self.ram_lines[ident]
     }
 
     pub fn flag_setters_from_useflag(&self, useflag_line: usize) -> Option<Vec<usize>> {
@@ -534,6 +553,8 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
     let label_to_page = &page_layout.label_to_page;
 
     let mut ram_pages = vec![];
+    let mut rom_lines: [Vec<CompiledLine>; 16] = Default::default();
+    let mut ram_lines = vec![];
     let mut useflag_lines: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut branch_lines: HashMap<usize, usize> = HashMap::new();
 
@@ -541,12 +562,15 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
     for (page, lines) in pages {
         let mut code = code.new_page(page);
         let mut useflag_saved_flag_state: Option<(FlagsState, usize)> = None; // (place where flags were set, assembly line of .USEFLAGS)
+        let mut page_lines = vec![];
         for LayoutPagesLine {
             line,
             assembly_line_num: line_num,
         } in lines
         {
-            match line.t {
+            let start = code.ptr.map(|p| p as usize).unwrap_or(256);
+
+            match line.t.clone() {
                 Line::Command(command) => {
                     match command {
                         crate::assembly::Command::Pass => {
@@ -920,6 +944,25 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                     Meta::Comment(..) => {}
                 },
             }
+
+            let end = code.ptr.map(|p| p as usize).unwrap_or(256);
+            page_lines.push(CompiledLine {
+                line,
+                assembly_line_num: line_num,
+                page_start: start,
+                page_end: end,
+            });
+        }
+
+        // record where the lines are in raw memory
+        match page {
+            PageIdent::Rom(page) => {
+                rom_lines[page.as_usize()].extend(page_lines);
+            }
+            PageIdent::Ram(ident) => {
+                debug_assert_eq!(ident, ram_lines.len());
+                ram_lines.push(page_lines);
+            }
         }
 
         // update ram_pages with the location of that page if it's a RAM page
@@ -946,6 +989,8 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
     Ok(CompileSuccess {
         program_memory,
         ram_pages,
+        rom_lines,
+        ram_lines,
         useflag_lines,
         branch_lines,
     })

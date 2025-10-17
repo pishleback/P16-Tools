@@ -31,14 +31,16 @@ pub struct RamMem {
 }
 impl RamMem {
     fn zeros() -> Self {
-        Self { data: [0; RAM_SIZE as usize] }
+        Self {
+            data: [0; RAM_SIZE as usize],
+        }
     }
 
-    pub fn get_value(&self, addr: u16) -> u16 {
+    pub fn read(&self, addr: u16) -> u16 {
         self.data[(addr % RAM_SIZE as u16) as usize]
     }
 
-    pub fn set_value(&mut self, addr: u16, value: u16) {
+    pub fn write(&mut self, addr: u16, value: u16) {
         self.data[(addr % RAM_SIZE as u16) as usize] = value
     }
 
@@ -63,6 +65,20 @@ impl ProgramMemory {
 
     pub fn rom_page(&self, nibble: Nibble) -> &ProgramPage {
         &self.rom[nibble.as_usize()]
+    }
+
+    pub fn ram_page(&self, start: u16) -> ProgramPage {
+        ProgramPage {
+            data: std::array::from_fn(|i| {
+                debug_assert!(i < 256);
+                let i = i as u8;
+                Nibble::new(
+                    ((self.ram.read(start.wrapping_add(i as u16 / 4)) >> (4 * (3 - (i % 4)))) % 16)
+                        as u8,
+                )
+                .unwrap()
+            }),
+        }
     }
 
     pub fn to_json(&self) -> serde_json::Value {

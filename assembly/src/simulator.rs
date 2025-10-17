@@ -21,7 +21,7 @@ impl ProgramMemory {
             ProgramPagePtr::Ram { addr } => {
                 let nibble_block = self
                     .ram()
-                    .get_value(addr.wrapping_add((ptr.counter / 4) as u16));
+                    .read(addr.wrapping_add((ptr.counter / 4) as u16));
                 let nibble_idx = 3 - ptr.counter % 4;
                 Nibble::new(((nibble_block >> (nibble_idx * 4)) & 15u16) as u8).unwrap()
             }
@@ -433,7 +433,7 @@ impl Simulator {
                         self.input_queue
                             .lock()
                             .unwrap()
-                            .push(self.memory.ram_mut().get_value(x));
+                            .push(self.memory.ram_mut().read(x));
                         self.push_data_stack(x).unwrap();
                     }
                     Nibble::N3 => {
@@ -444,7 +444,7 @@ impl Simulator {
                         self.input_queue
                             .lock()
                             .unwrap()
-                            .push(self.memory.ram_mut().get_value(x));
+                            .push(self.memory.ram_mut().read(x));
                     }
                     Nibble::N4 => {
                         if log_instructions {
@@ -610,7 +610,7 @@ impl Simulator {
                             println!("Write");
                         }
                         let x = self.pop_data_stack();
-                        self.memory.ram_mut().set_value(x, r);
+                        self.memory.ram_mut().write(x, r);
                         self.push_data_stack(x).unwrap();
                     }
                     Nibble::N3 => {
@@ -618,7 +618,7 @@ impl Simulator {
                             println!("Write and Pop");
                         }
                         let x = self.pop_data_stack();
-                        self.memory.ram_mut().set_value(x, r);
+                        self.memory.ram_mut().write(x, r);
                     }
                     Nibble::N4 => {
                         if log_instructions {

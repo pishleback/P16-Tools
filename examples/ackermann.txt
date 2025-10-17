@@ -2,15 +2,15 @@
 CALL start
 RETURN
 
-
 ..ROM 1
 
 .LABEL start
-INPUT
-INPUT
+.COMMENT "inputs"
+VALUE 3
+VALUE 2
 CALL ack
 OUTPUT 1.0
-JUMP start
+RETURN
 
 .LABEL ack
 POP %0
