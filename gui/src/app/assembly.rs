@@ -67,7 +67,6 @@ struct TextAttrs {
     italics: RangeMap<usize, bool>,
 }
 
-/// Highlights all instances of "foo" in blue.
 fn layout_job(
     text: &str,
     selected_lines: &Option<HashSet<usize>>,

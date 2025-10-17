@@ -61,3 +61,13 @@ pub fn update(
         });
     }
 }
+
+
+// fn layout_job(
+//     text: &str,
+//     selected_lines: &Option<HashSet<usize>>,
+//     result: &FullCompileResult,
+//     visuals: &Visuals,
+// ) -> LayoutJob {
+
+// }
