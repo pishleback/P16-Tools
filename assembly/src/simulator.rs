@@ -41,15 +41,15 @@ impl ProgramMemory {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum ProgramPagePtr {
+pub enum ProgramPagePtr {
     Rom { page: Nibble },
     Ram { addr: u16 },
 }
 
 #[derive(Debug, Clone, Copy)]
-struct ProgramPtr {
-    page: ProgramPagePtr,
-    counter: u8,
+pub struct ProgramPtr {
+    pub page: ProgramPagePtr,
+    pub counter: u8,
 }
 impl ProgramPtr {
     fn increment(&mut self) {
@@ -115,7 +115,23 @@ impl InputQueue {
     }
 }
 
-pub type OutputTarget = Box<dyn FnMut(Vec<OctDigit>, u16)>;
+#[derive(Debug)]
+pub struct OutputQueue {
+    queue: VecDeque<(Vec<OctDigit>, u16)>,
+}
+impl OutputQueue {
+    fn new() -> Self {
+        Self { queue: [].into() }
+    }
+    fn push(&mut self, path: Vec<OctDigit>, val: u16) {
+        self.queue.push_back((path, val));
+    }
+    pub fn pop(&mut self) -> Option<(Vec<OctDigit>, u16)> {
+        self.queue.pop_front()
+    }
+}
+
+const DATA_STACK_SIZE: usize = 32;
 
 pub struct Simulator {
     memory: ProgramMemory,
@@ -127,7 +143,7 @@ pub struct Simulator {
     flags_delay: VecDeque<AluFlags>,
     flags: AluFlags,
     input_queue: Arc<Mutex<InputQueue>>,
-    output_targets: Vec<OutputTarget>,
+    output_queue: Arc<Mutex<OutputQueue>>,
 }
 
 impl Simulator {
@@ -159,14 +175,10 @@ impl Simulator {
                 overflow: false,
             },
             input_queue: Arc::new(Mutex::new(InputQueue::new())),
-            output_targets: vec![],
+            output_queue: Arc::new(Mutex::new(OutputQueue::new())),
         };
         s.load_pache();
         s
-    }
-
-    pub fn subscribe_to_output(&mut self, callback: OutputTarget) {
-        self.output_targets.push(callback);
     }
 
     pub fn input_queue(&mut self) -> Arc<Mutex<InputQueue>> {
@@ -175,6 +187,10 @@ impl Simulator {
 
     pub fn input_value(&mut self, value: u16) {
         self.input_queue.lock().unwrap().push(value);
+    }
+
+    pub fn output_queue(&mut self) -> Arc<Mutex<OutputQueue>> {
+        self.output_queue.clone()
     }
 
     fn set_flags(&mut self, flags: AluFlags, past: usize) {
@@ -207,7 +223,9 @@ impl Simulator {
 
     fn push_data_stack(&mut self, x: u16) -> Result<(), EndErrorState> {
         self.data_stack.push(x);
-        // return EndErrorState::DataStackOverflow;
+        if self.data_stack.len() >= DATA_STACK_SIZE {
+            return Err(EndErrorState::DataStackOverflow);
+        }
         Ok(())
     }
 
@@ -215,12 +233,20 @@ impl Simulator {
         self.data_stack.pop().unwrap_or(0)
     }
 
-    pub fn get_reg(& self, reg: Nibble) ->  u16 {
+    fn get_reg_mut(&mut self, reg: Nibble) -> &mut u16 {
+        &mut self.registers[reg.as_usize()]
+    }
+
+    pub fn get_reg(&self, reg: Nibble) -> u16 {
         self.registers[reg.as_usize()]
     }
 
-    fn get_reg_mut(&mut self, reg: Nibble) -> &mut u16 {
-        &mut self.registers[reg.as_usize()]
+    pub fn get_pc(&self) -> ProgramPtr {
+        self.program_counter
+    }
+
+    pub fn get_data_stack(&self) -> Vec<u16> {
+        self.data_stack.clone()
     }
 
     pub fn step(&mut self, log_instructions: bool) -> Result<EndStepOkState, EndErrorState> {
@@ -748,12 +774,11 @@ impl Simulator {
                 self.flush_flag_delay();
             }
             Nibble::N14 => {
-                if log_instructions {
-                    println!("Input");
-                }
-
                 let val_opt = self.input_queue.lock().unwrap().pop();
                 if let Some(val) = val_opt {
+                    if log_instructions {
+                        println!("Input");
+                    }
                     self.increment();
                     self.push_data_stack(val)?;
                 } else {
@@ -776,10 +801,8 @@ impl Simulator {
                         break;
                     }
                 }
-                let v = self.pop_data_stack();
-                for output_target in &mut self.output_targets {
-                    output_target(octs.clone(), v);
-                }
+                let val = self.pop_data_stack();
+                self.output_queue.lock().unwrap().push(octs.clone(), val);
             }
         }
         Ok(EndStepOkState::Continue)
@@ -788,31 +811,38 @@ impl Simulator {
     pub fn run(&mut self, log_instructions: bool, log_state: bool) -> Result<(), EndErrorState> {
         loop {
             let result = self.step(log_instructions)?;
-            if log_state {
-                let mut flags = vec![];
-                if self.flags.zero {
-                    flags.push("Z");
+
+            match result {
+                EndStepOkState::Continue | EndStepOkState::Finish => {
+                    if log_state {
+                        let mut flags = vec![];
+                        if self.flags.zero {
+                            flags.push("Z");
+                        }
+                        if self.flags.negative {
+                            flags.push("N");
+                        }
+                        if self.flags.overflow {
+                            flags.push("V");
+                        }
+                        if self.flags.carry {
+                            flags.push("C");
+                        }
+                        println!(
+                            "    {:?} {:?} {:?} {:?}",
+                            self.program_counter,
+                            flags,
+                            self.registers.iter().map(|n| *n as i16).collect::<Vec<_>>(),
+                            self.data_stack
+                                .iter()
+                                .map(|n| *n as i16)
+                                .collect::<Vec<_>>()
+                        );
+                    }
                 }
-                if self.flags.negative {
-                    flags.push("N");
-                }
-                if self.flags.overflow {
-                    flags.push("V");
-                }
-                if self.flags.carry {
-                    flags.push("C");
-                }
-                println!(
-                    "    {:?} {:?} {:?} {:?}",
-                    self.program_counter,
-                    flags,
-                    self.registers.iter().map(|n| *n as i16).collect::<Vec<_>>(),
-                    self.data_stack
-                        .iter()
-                        .map(|n| *n as i16)
-                        .collect::<Vec<_>>()
-                );
+                EndStepOkState::WaitingForInput => {}
             }
+
             match result {
                 EndStepOkState::Continue => {}
                 EndStepOkState::Finish => {

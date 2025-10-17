@@ -17,6 +17,7 @@ pub use compile::layout_pages;
 pub use compile::CompileError;
 pub use compile::CompileSuccess;
 pub use compile::LayoutPagesError;
+pub use compile::LayoutPagesLine;
 pub use compile::LayoutPagesSuccess;
 pub use compile::PageIdent;
 pub use datatypes::Nibble;
@@ -24,6 +25,10 @@ pub use datatypes::OctDigit;
 pub use memory::ProgramMemory;
 pub use memory::RAM_SIZE;
 pub use memory::RAM_SIZE_NIBBLES;
+pub use simulator::EndErrorState;
+pub use simulator::EndStepOkState;
+pub use simulator::ProgramPagePtr;
+pub use simulator::ProgramPtr;
 pub use simulator::Simulator;
 
 pub type FullCompileResult<'a> = Result<

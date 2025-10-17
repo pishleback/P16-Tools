@@ -11,13 +11,13 @@ use std::{
 #[derive(Debug)]
 struct Memory {
     rom_pages: [[Option<Nibble>; 256]; 16],
-    ram: [Option<Nibble>; 1 << (12 + 2)],
+    ram: [Option<Nibble>; RAM_SIZE_NIBBLES as usize],
 }
 impl Memory {
     fn blank() -> Self {
         Self {
             rom_pages: [[None; 256]; 16],
-            ram: [None; 1 << (12 + 2)],
+            ram: [None; RAM_SIZE_NIBBLES as usize],
         }
     }
 
@@ -71,7 +71,7 @@ impl PageLocation {
     fn nibble_ptr(&self, a: u8) -> MemNibblePtr {
         match self {
             PageLocation::Rom(nibble) => MemNibblePtr::Rom(*nibble, a),
-            PageLocation::Ram(base) => MemNibblePtr::Ram(*base as usize + a as usize),
+            PageLocation::Ram(base) => MemNibblePtr::Ram(4 * (*base as usize) + a as usize),
         }
     }
 }
@@ -151,16 +151,16 @@ impl MemoryManager {
         // Replace labels with u8 page addresses
         for (label, blank_page, blank_ptr) in &self.label_targets {
             let (_target_page, target_ptr) = self.label_values.get(label).unwrap();
-            let page = blank_page;
+
             self.memory
                 .set_nibble(
-                    page.nibble_ptr(*blank_ptr),
+                    blank_page.nibble_ptr(*blank_ptr),
                     Nibble::new((target_ptr >> 4) & 15).unwrap(),
                 )
                 .unwrap();
             self.memory
                 .set_nibble(
-                    page.nibble_ptr(*blank_ptr + 1),
+                    blank_page.nibble_ptr(*blank_ptr + 1),
                     Nibble::new(target_ptr & 15).unwrap(),
                 )
                 .unwrap();
@@ -374,9 +374,9 @@ impl<'a> MemoryPageManager<'a> {
 }
 
 #[derive(Debug, Clone)]
-struct LayoutPagesLine {
-    line: WithPos<Line>,
-    assembly_line_num: usize, //the index of the line in the assembly (not the same as line #)
+pub struct LayoutPagesLine {
+    pub line: WithPos<Line>,
+    pub assembly_line_num: usize, //the index of the line in the assembly (not the same as line #)
 }
 
 #[derive(Debug, Clone)]
@@ -469,9 +469,17 @@ pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPag
     })
 }
 
+// The location in RAM of a ..RAM page
+#[derive(Debug, Clone)]
+pub struct RamPageLocation {
+    pub start: u16,
+    pub length: u16,
+}
+
 #[derive(Debug, Clone)]
 pub struct CompileSuccess {
     program_memory: ProgramMemory,
+    ram_pages: Vec<RamPageLocation>, // One for each PageIdent::Ram(#) in the page layout i.e. one for each ..RAM section in the assembly in the same order as they appear
     useflag_lines: HashMap<usize, Vec<usize>>, // point from .USEFLAG lines to the line whose flags it could be using
     branch_lines: HashMap<usize, usize>,       // point from BRANCH to the .USEFLAG line it is using
 }
@@ -479,6 +487,10 @@ pub struct CompileSuccess {
 impl CompileSuccess {
     pub fn memory(&self) -> &ProgramMemory {
         &self.program_memory
+    }
+
+    pub fn ram_page(&self, ident: usize) -> RamPageLocation {
+        self.ram_pages[ident].clone()
     }
 
     pub fn flag_setters_from_useflag(&self, useflag_line: usize) -> Option<Vec<usize>> {
@@ -521,6 +533,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
     let pages = page_layout.pages.clone();
     let label_to_page = &page_layout.label_to_page;
 
+    let mut ram_pages = vec![];
     let mut useflag_lines: HashMap<usize, Vec<usize>> = HashMap::new();
     let mut branch_lines: HashMap<usize, usize> = HashMap::new();
 
@@ -908,6 +921,23 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                 },
             }
         }
+
+        // update ram_pages with the location of that page if it's a RAM page
+        match code.page_ident {
+            PageIdent::Rom(_) => {}
+            PageIdent::Ram(ident) => {
+                debug_assert_eq!(ident, ram_pages.len());
+                match code.page {
+                    PageLocation::Rom(_) => {
+                        unreachable!()
+                    }
+                    PageLocation::Ram(start) => {
+                        let length = code.ptr.map(|x| x as u16).unwrap_or(256);
+                        ram_pages.push(RamPageLocation { start, length });
+                    }
+                }
+            }
+        }
     }
 
     let memory = code.finish();
@@ -915,6 +945,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
 
     Ok(CompileSuccess {
         program_memory,
+        ram_pages,
         useflag_lines,
         branch_lines,
     })

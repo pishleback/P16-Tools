@@ -64,9 +64,14 @@ fn main() {
 
     if args.simulate {
         let mut sim = memory.simulator();
-        sim.subscribe_to_output(Box::new(|addr, value| {
-            println!("{addr:?} {value:?}");
-        }));
+
+        let output = sim.output_queue();
+        std::thread::spawn(move || loop {
+            while let Some((path, val)) = output.lock().unwrap().pop() {
+                println!("Got Output {path:?} {val:?}");
+            }
+            sleep(Duration::from_millis(100));
+        });
 
         let input = sim.input_queue();
         std::thread::spawn(move || {

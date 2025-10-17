@@ -1,10 +1,10 @@
 use crate::datatypes::Nibble;
 
 #[derive(Debug, Clone)]
-pub struct RomPage {
+pub struct ProgramPage {
     data: [Nibble; 256],
 }
-impl RomPage {
+impl ProgramPage {
     fn zeros() -> Self {
         Self {
             data: core::array::from_fn(|_i| Nibble::N0),
@@ -49,7 +49,7 @@ impl RamMem {
 
 #[derive(Debug, Clone)]
 pub struct ProgramMemory {
-    rom: [RomPage; 16],
+    rom: [ProgramPage; 16],
     ram: RamMem,
 }
 impl ProgramMemory {
@@ -61,7 +61,7 @@ impl ProgramMemory {
         &mut self.ram
     }
 
-    pub fn rom_page(&self, nibble: Nibble) -> &RomPage {
+    pub fn rom_page(&self, nibble: Nibble) -> &ProgramPage {
         &self.rom[nibble.as_usize()]
     }
 
@@ -103,7 +103,7 @@ impl ProgramMemory {
 
     pub fn new(rom: [[Nibble; 256]; 16], ram: [Nibble; 1 << (12 + 2)]) -> Self {
         Self {
-            rom: core::array::from_fn(|i| RomPage {
+            rom: core::array::from_fn(|i| ProgramPage {
                 data: core::array::from_fn(|j| rom[i][j]),
             }),
             ram: RamMem {
@@ -119,7 +119,7 @@ impl ProgramMemory {
     }
 
     pub fn zeros() -> Self {
-        let rom = core::array::from_fn(|_i| RomPage::zeros());
+        let rom = core::array::from_fn(|_i| ProgramPage::zeros());
         let ram = RamMem::zeros();
         Self { rom, ram }
     }
