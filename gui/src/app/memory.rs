@@ -1,8 +1,7 @@
-use std::collections::HashSet;
-
 use crate::app::state::State;
-use assembly::{CompiledLine, FullCompileResult, Nibble, RAM_SIZE};
+use assembly::{CompiledLine, FullCompileResult, Nibble};
 use egui::{Color32, TextBuffer, TextFormat, Ui, Visuals, text::LayoutJob};
+use std::collections::HashSet;
 
 pub fn update(
     state: &State,
@@ -11,7 +10,7 @@ pub fn update(
     _frame: &mut eframe::Frame,
     ui: &mut egui::Ui,
 ) {
-    if let Ok((Ok((Ok(compiled), page_layout)), _assembly)) = &compile_result {
+    if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
         let raw_memory = compiled.memory().clone();
 
         egui::CollapsingHeader::new("Memory").show(ui, |ui| {
