@@ -1,9 +1,11 @@
 use assembly::{EndErrorState, Nibble, ProgramPtr, Simulator, full_compile};
 use egui::{RichText, Slider};
-use std::{
-    sync::{Arc, Mutex},
-    thread::{JoinHandle, spawn},
-};
+use std::sync::{Arc, Mutex};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::thread::{JoinHandle, spawn};
+#[cfg(target_arch = "wasm32")]
+use wasm_thread::{JoinHandle, spawn};
 
 #[derive(Debug, Clone, Copy)]
 enum SimulatorEndState {
