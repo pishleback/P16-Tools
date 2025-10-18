@@ -22,9 +22,11 @@ There are 16 pages of program ROM in all. The levers on top are page 0. The othe
 
 # Instruction Set and Assembly Language
 
+## Examples
+
 Example assembly files can be found in the `examples` folder.
 
-## Operations
+## Instructions
 
 There are 16 general purpose registers and a data stack.
 
@@ -36,6 +38,7 @@ The table below describes the assembly commands and what they do. The last colum
 | `..RAM`                      | All following instructions are placed in RAM until told otherwise.                                                                                                                                                                                                                                                  |         -          | -                                                                                                                                                                                                                                                                                              |
 | `PASS`                       | Does nothing.                                                                                                                                                                                                                                                                                                       |        :x:         | `0`                                                                                                                                                                                                                                                                                            |
 | `VALUE <value>`              | Push `value` onto the stack.                                                                                                                                                                                                                                                                                        |        :x:         | `1vvvv` where `vvvv` is the 16-bit representation of `value`.                                                                                                                                                                                                                                  |
+| `VALUE <label>`              | Push the address of `label` in RAM onto the stack.                                                                                                                                                                                                                                                                  |        :x:         | `1aaaa` where `aaaa` is the 16-bit address of `label` in RAM.                                                                                                                                                                                                                                  |
 | `.LABEL <label>`             | Label a location in the program.                                                                                                                                                                                                                                                                                    |         -          | -                                                                                                                                                                                                                                                                                              |
 | `JUMP <label>`               | Continue execution from the`.LABEL` called `label`.                                                                                                                                                                                                                                                                 |        :x:         | `2aa` where `aa` is the address of `label` in the current page.                                                                                                                                                                                                                                |
 | `.USEFLAGS`                  | Placed after an instruction which sets ALU flags to ensure that the next `BRANCH` instruction uses those flags. Additional `PASS` instructions will be inserted to uphold this condition if possible. If a later instruction would overwrite the flags used by the `BRANCH` then the assembly will fail to compile. |         -          | -                                                                                                                                                                                                                                                                                              |
@@ -90,7 +93,7 @@ There are also some commands for setting up RAM.
 | `..DATA`                     | All following instructions take effect in RAM.   |
 | `.LABEL <label>`             | Label a location in RAM.                         |
 | `VALUE <value>`              | Put `value` into RAM.                            |
-| `ALLOC <quantity>`           | Reserve the next `quantity` addresses in RAM     |
+| `ALLOC <quantity>`           | Reserve the next `quantity` addresses in RAM.    |
 
 There are four ALU flags `Z`, `N`, `C`, and `V` and an additional flag `I`. The conditions under which each of these flags are set are:
 
@@ -126,6 +129,8 @@ The possible values for `condition` in the `BRANCH` instruction and their meanin
 | `LT`     | Less Than             | `N`≠`V`          | `D`          |
 | `GT`     | Greater Than          | `N`=`V` and !`Z` | `E`          |
 | `LE`     | Less or Equal         | `N`≠`V` or `Z`   | `F`          |
+
+Comments come after a `#` character, similar to Python.
 
 # Getting started
 

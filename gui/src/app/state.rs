@@ -63,7 +63,25 @@ impl State {
                                     assembly::CompileError::MissingLabel { label, .. } => {
                                         ui.label(
                                             RichText::new(format!(
-                                                "Label `{}` not defined.",
+                                                "Page location label `{}` not defined.",
+                                                label.t.to_string()
+                                            ))
+                                            .color(Color32::RED),
+                                        );
+                                    }
+                                    assembly::CompileError::MissingRamLabel { label, .. } => {
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "RAM address label `{}` not defined.",
+                                                label.t.to_string()
+                                            ))
+                                            .color(Color32::RED),
+                                        );
+                                    }
+                                    assembly::CompileError::DuplicateRamLabel { label, .. } => {
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "Duplicate RAM Label Definition: `{}`",
                                                 label.t.to_string()
                                             ))
                                             .color(Color32::RED),
@@ -91,22 +109,19 @@ possible to fix with extra PASS instructions.",
                                     assembly::CompileError::BadUseflags { .. } => {
                                         ui.label(RichText::new("BadUseflags").color(Color32::RED));
                                     }
-                                    assembly::CompileError::PageFull { page } => match page {
-                                        assembly::PageIdent::Rom(nibble) => {
-                                            ui.label(
-                                                RichText::new(format!(
-                                                    "ROM page {} is full.",
-                                                    nibble.hex_str()
-                                                ))
-                                                .color(Color32::RED),
-                                            );
-                                        }
-                                        assembly::PageIdent::Ram(_) => {
-                                            ui.label(
-                                                RichText::new("RAM is full.").color(Color32::RED),
-                                            );
-                                        }
-                                    },
+                                    assembly::CompileError::RomPageFull { page } => {
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "ROM page {} is full.",
+                                                page.hex_str()
+                                            ))
+                                            .color(Color32::RED),
+                                        );
+                                    }
+                                    assembly::CompileError::RamFull => {
+                                        ui.label(RichText::new("RAM is full.").color(Color32::RED));
+                                    }
+
                                     assembly::CompileError::InvalidCommandLocation { .. } => {
                                         ui.label(
                                             RichText::new(
@@ -176,6 +191,7 @@ Missing page definition. Add `..ROM <page>` or `..RAM` before instructions."
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .stick_to_bottom(false)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
                     egui::CollapsingHeader::new("Assembly").show(ui, |ui| {
                         super::assembly::update(self, &compile_result, ctx, frame, ui);

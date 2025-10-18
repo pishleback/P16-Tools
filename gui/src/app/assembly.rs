@@ -145,6 +145,9 @@ fn layout_job(
                         | assembly::Command::SubWithCarry(register) => {
                             add_register(&mut text_attrs, register);
                         }
+                        assembly::Command::AddressValue(label) => {
+                            add_label(&mut text_attrs, label);
+                        }
                         assembly::Command::Jump(label) => {
                             add_label(&mut text_attrs, label);
                         }
@@ -206,9 +209,6 @@ fn layout_job(
                         }
                         assembly::Meta::UseFlags => {
                             text_attrs.italics.insert(*start..*end, true);
-                        }
-                        assembly::Meta::Comment(comment) => {
-                            text_attrs.italics.insert(*start..comment.end, true);
                         }
                     },
                 }
@@ -316,6 +316,25 @@ fn layout_job(
                                 ),
                             }
                         }
+                        assembly::CompileError::MissingRamLabel { line, .. } => {
+                            let line = assembly.line_with_pos(*line);
+                            match &line.t {
+                                assembly::Line::Command(Command::AddressValue(label)) => {
+                                    text_attrs
+                                        .underline
+                                        .insert(label.start..label.end, red_underline);
+                                }
+                                _ => panic!(
+                                    "Other lines should not panic here since they have no label argument."
+                                ),
+                            }
+                        }
+                        assembly::CompileError::DuplicateRamLabel { line, .. } => {
+                            let line = assembly.line_with_pos(*line);
+                            text_attrs
+                                .underline
+                                .insert(line.start..line.end, red_underline);
+                        }
                         assembly::CompileError::JumpOrBranchToOtherPage { line } => {
                             let line = assembly.line_with_pos(*line);
                             match &line.t {
@@ -349,11 +368,19 @@ fn layout_job(
                                 .underline
                                 .insert(useflags_line.start..useflags_line.end, red_underline);
                         }
-                        assembly::CompileError::PageFull { page } => {
-                            for (start, end) in page_layout.get_page_text_intervals(page) {
+
+                        assembly::CompileError::RomPageFull { page } => {
+                            for (start, end) in page_layout.get_rom_page_text_intervals(*page) {
                                 text_attrs.underline.insert(start..end, red_underline);
                             }
                         }
+
+                        assembly::CompileError::RamFull => {
+                            for (start, end) in page_layout.get_ram_text_intervals() {
+                                text_attrs.underline.insert(start..end, red_underline);
+                            }
+                        }
+
                         assembly::CompileError::InvalidCommandLocation { line } => {
                             let line = assembly.line_with_pos(*line);
                             text_attrs

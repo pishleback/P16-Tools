@@ -3,6 +3,15 @@ use std::str::FromStr;
 
 grammar;
 
+match {
+    r"\s*" => { }, // The default whitespace skipping is disabled if an `ignore pattern` is specified
+    r"#[^\n\r]*[\n\r]*" => { }, // Skip `# comments`
+} else {
+    r"#[^\n]*[\n]*" => { }, // Skip `# comments`
+} else {
+    _
+}
+
 WithPos<T>: WithPos<T> = {
     <start:@L> <t:T> <end:@R> => WithPos{ start, end, t }
 }
@@ -122,6 +131,7 @@ Line: Line = {
 
     "PASS" => Line::Command(Command::Pass),
     "VALUE" <value:WithPos<SixteenBitNum>> => Line::Command(Command::Value(value)),
+    "VALUE" <l:Label> => Line::Command(Command::AddressValue(l)),
     "JUMP" <l:Label> => Line::Command(Command::Jump(l)),
     "BRANCH" <c:WithPos<Condition>> <l:Label> => Line::Command(Command::Branch(c, l)),
     "PUSH" <r:WithPos<Register>> => Line::Command(Command::Push(r)),
@@ -176,8 +186,6 @@ Line: Line = {
     "..DATA" => Line::Meta(Meta::Data),
     ".LABEL" <l:Label> => Line::Meta(Meta::Label(l)),
     ".USEFLAGS" => Line::Meta(Meta::UseFlags),
-
-    ".COMMENT" <startc:@L> <c:r#""[0-9|a-z|A-Z|\s|']*""#> <endc:@R> => Line::Meta(Meta::Comment(WithPos{ start: startc, end: endc, t: String::from(c) })),
 };
 
 pub Assembly: Assembly = {

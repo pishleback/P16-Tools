@@ -1,6 +1,6 @@
 use crate::app::state::State;
-use assembly::ProgramPagePtr;
 use assembly::{CompiledLine, FullCompileResult, Nibble};
+use assembly::{ProgramPagePtr, RamMem};
 use egui::{Color32, TextBuffer, TextFormat, Ui, Visuals, text::LayoutJob};
 use std::collections::HashSet;
 
@@ -111,6 +111,12 @@ pub fn update(
                 }
             }
 
+            egui::CollapsingHeader::new("RAM".to_string()).show(ui, |ui| {
+                let ram_data =
+                    simulator.map_or(raw_memory.ram().clone(), |s| s.get_memory().ram().clone());
+                ram(ui, ram_data);
+            });
+
             #[cfg(false)]
             {
                 let ram_data = simulator.map_or(raw_memory.ram().data().to_vec(), |s| {
@@ -219,6 +225,73 @@ fn page(
         ui.fonts(|f| f.layout_job(job))
     };
 
+    fn layout_job(
+        page: &str,
+        visuals: &Visuals,
+        lines: &Vec<CompiledLine>,
+        selected_assembly: &HashSet<usize>,
+        pc: Option<u8>,
+    ) -> LayoutJob {
+        let mut job = LayoutJob::default();
+        let mut i = 0;
+        let mut no_space = false;
+        let selected_colour = visuals
+            .strong_text_color()
+            .lerp_to_gamma(Color32::CYAN.lerp_to_gamma(Color32::BLUE, 0.4), 0.5);
+        for CompiledLine {
+            page_start,
+            page_end,
+            assembly_line_num,
+            ..
+        } in lines
+        {
+            if page_start == page_end {
+                //zero-sized assembly command e.g. meta commands like .LABEL
+                if selected_assembly.contains(assembly_line_num) {
+                    job.append(
+                        "|",
+                        0.0,
+                        TextFormat {
+                            color: selected_colour,
+                            ..Default::default()
+                        },
+                    );
+                    no_space = true;
+                }
+            } else {
+                if i != 0 && !no_space {
+                    job.append(
+                        " ",
+                        0.0,
+                        TextFormat {
+                            ..Default::default()
+                        },
+                    );
+                }
+                i += 1;
+                no_space = false;
+
+                for i in *page_start..*page_end {
+                    job.append(
+                        &page[i..(i + 1)],
+                        0.0,
+                        TextFormat {
+                            color: if selected_assembly.contains(assembly_line_num) {
+                                selected_colour
+                            } else if pc.is_some_and(|pc| pc as usize == i) {
+                                visuals.strong_text_color()
+                            } else {
+                                visuals.text_color()
+                            },
+                            ..Default::default()
+                        },
+                    );
+                }
+            }
+        }
+        job
+    }
+
     ui.add(
         egui::TextEdit::multiline(&mut nibbles)
             .font(egui::TextStyle::Monospace)
@@ -228,83 +301,37 @@ fn page(
             .interactive(false)
             .layouter(&mut layouter),
     );
-}
-
-fn layout_job(
-    page: &str,
-    visuals: &Visuals,
-    lines: &Vec<CompiledLine>,
-    selected_assembly: &HashSet<usize>,
-    pc: Option<u8>,
-) -> LayoutJob {
-    let mut job = LayoutJob::default();
-    let mut i = 0;
-    let mut no_space = false;
-    let selected_colour = visuals
-        .strong_text_color()
-        .lerp_to_gamma(Color32::CYAN.lerp_to_gamma(Color32::BLUE, 0.4), 0.5);
-    for CompiledLine {
-        page_start,
-        page_end,
-        assembly_line_num,
-        ..
-    } in lines
-    {
-        if page_start == page_end {
-            //zero-sized assembly command e.g. meta commands like .LABEL
-            if selected_assembly.contains(assembly_line_num) {
-                job.append(
-                    "|",
-                    0.0,
-                    TextFormat {
-                        color: selected_colour,
-                        ..Default::default()
-                    },
-                );
-                no_space = true;
-            }
-        } else {
-            if i != 0 && !no_space {
-                job.append(
-                    " ",
-                    0.0,
-                    TextFormat {
-                        ..Default::default()
-                    },
-                );
-            }
-            i += 1;
-            no_space = false;
-
-            for i in *page_start..*page_end {
-                job.append(
-                    &page[i..(i + 1)],
-                    0.0,
-                    TextFormat {
-                        color: if selected_assembly.contains(assembly_line_num) {
-                            selected_colour
-                        } else if pc.is_some_and(|pc| pc as usize == i) {
-                            visuals.strong_text_color()
-                        } else {
-                            visuals.text_color()
-                        },
-                        ..Default::default()
-                    },
-                );
-            }
-        }
-    }
-    job
 }
 
 fn page_raw(ui: &mut Ui, nibbles: Vec<Nibble>, pc: Option<u8>) {
     let mut nibbles = nibbles.iter().map(|n| n.hex_str()).collect::<String>();
 
     let mut layouter = |ui: &egui::Ui, text: &dyn TextBuffer, wrap_width: f32| {
-        let mut job = layout_job_raw(text.as_str(), ui.visuals(), pc);
+        let mut job = layout_job(text.as_str(), ui.visuals(), pc);
         job.wrap.max_width = wrap_width;
         ui.fonts(|f| f.layout_job(job))
     };
+
+    fn layout_job(page: &str, visuals: &Visuals, pc: Option<u8>) -> LayoutJob {
+        let mut job = LayoutJob::default();
+        debug_assert_eq!(page.len(), 256);
+        for i in 0..page.len() {
+            debug_assert!(i < 256);
+            job.append(
+                &page[i..(i + 1)],
+                0.0,
+                TextFormat {
+                    color: if pc.is_some_and(|pc| i == pc as usize) {
+                        visuals.strong_text_color()
+                    } else {
+                        visuals.text_color()
+                    },
+                    ..Default::default()
+                },
+            );
+        }
+        job
+    }
 
     ui.add(
         egui::TextEdit::multiline(&mut nibbles)
@@ -317,23 +344,163 @@ fn page_raw(ui: &mut Ui, nibbles: Vec<Nibble>, pc: Option<u8>) {
     );
 }
 
-fn layout_job_raw(page: &str, visuals: &Visuals, pc: Option<u8>) -> LayoutJob {
-    let mut job = LayoutJob::default();
-    debug_assert_eq!(page.len(), 256);
-    for i in 0..page.len() {
-        debug_assert!(i < 256);
+fn ram(ui: &mut Ui, ram: RamMem) {
+    let mut layouter = |ui: &egui::Ui, _text: &dyn TextBuffer, wrap_width: f32| {
+        let max_chars = {
+            let char_width = ui.fonts(|fonts| {
+                fonts.glyph_width(&egui::TextStyle::Monospace.resolve(ui.style()), '0')
+            });
+            // theoretical answer
+            let max_chars = (wrap_width / char_width).floor() as usize;
+            // // but it seems to be off a bit
+            // let max_chars = max_chars.saturating_sub(3);
+            std::cmp::max(max_chars, 1)
+        };
+
+        let mut job = layout_job(ui.visuals(), max_chars, &ram);
+        job.wrap.max_width = wrap_width;
+        ui.fonts(|f| f.layout_job(job))
+    };
+
+    fn layout_job(visuals: &Visuals, max_width: usize, ram: &RamMem) -> LayoutJob {
+        let rpad_to_len = |mut s: String, n: usize, c: char| -> String {
+            while s.len() < n {
+                s += &String::from(c);
+            }
+            s
+        };
+        let lpad_to_len = |mut s: String, n: usize, c: char| -> String {
+            while s.len() < n {
+                s = String::from(c) + &s;
+            }
+            s
+        };
+
+        let format_decimal = (
+            |v: u16| -> String { lpad_to_len(format!("{}", v), 5, ' ') },
+            5usize,
+        );
+        let format_hex = (
+            |v: u16| -> String {
+                format!(
+                    "{}{}{}{}",
+                    Nibble::new(((v >> 12) & 15u16) as u8).unwrap().hex_str(),
+                    Nibble::new(((v >> 8) & 15u16) as u8).unwrap().hex_str(),
+                    Nibble::new(((v >> 4) & 15u16) as u8).unwrap().hex_str(),
+                    Nibble::new((v & 15u16) as u8).unwrap().hex_str()
+                )
+            },
+            4usize,
+        );
+        let format_bin = (
+            |v: u16| -> String { lpad_to_len(format!("{:b}", v), 16, '0') },
+            16usize,
+        );
+
+        let (format_value, value_width) = format_hex;
+        let (format_addr, addr_width) = format_hex;
+
+        let col_width = std::cmp::max(value_width, addr_width);
+
+        let cols_power_of_2 = {
+            let mut power_of_2 = 0usize;
+            loop {
+                let width = addr_width + (col_width + 1) * (1usize << (power_of_2 + 1));
+                if width > max_width {
+                    break;
+                }
+                power_of_2 += 1;
+            }
+            power_of_2
+        };
+        let cols = 1usize << cols_power_of_2;
+
+        let mut job: LayoutJob = LayoutJob::default();
+
+        // Top row
         job.append(
-            &page[i..(i + 1)],
+            &String::from(" ").repeat(addr_width),
             0.0,
             TextFormat {
-                color: if pc.is_some_and(|pc| i == pc as usize) {
-                    visuals.strong_text_color()
-                } else {
-                    visuals.text_color()
-                },
+                font_id: egui::FontId::monospace(12.0),
                 ..Default::default()
             },
         );
+        for i in 0..cols {
+            job.append(
+                " ",
+                0.0,
+                TextFormat {
+                    font_id: egui::FontId::monospace(12.0),
+                    ..Default::default()
+                },
+            );
+            job.append(
+                &rpad_to_len(format_addr(i as u16), col_width, ' '),
+                0.0,
+                TextFormat {
+                    font_id: egui::FontId::monospace(12.0),
+                    color: visuals.strong_text_color(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        // Other rows
+        for (i, values) in ram.data().chunks(cols).enumerate() {
+            job.append(
+                "\n",
+                0.0,
+                TextFormat {
+                    font_id: egui::FontId::monospace(12.0),
+                    ..Default::default()
+                },
+            );
+            job.append(
+                &format_addr((i * cols) as u16),
+                0.0,
+                TextFormat {
+                    font_id: egui::FontId::monospace(12.0),
+                    color: visuals.strong_text_color(),
+                    ..Default::default()
+                },
+            );
+            for value in values {
+                job.append(
+                    " ",
+                    0.0,
+                    TextFormat {
+                        font_id: egui::FontId::monospace(12.0),
+                        ..Default::default()
+                    },
+                );
+                job.append(
+                    &rpad_to_len(format_value(*value), col_width, ' '),
+                    0.0,
+                    TextFormat {
+                        font_id: egui::FontId::monospace(12.0),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
+        job
     }
-    job
+
+    let mut s = String::from(""); // Unused
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, true])
+        .stick_to_bottom(false)
+        .max_height(300.0)
+        .show(ui, |ui| {
+            ui.add(
+                egui::TextEdit::multiline(&mut s)
+                    .font(egui::TextStyle::Monospace)
+                    .desired_rows(1)
+                    .lock_focus(true)
+                    .desired_width(f32::INFINITY)
+                    .interactive(false)
+                    .layouter(&mut layouter),
+            );
+        });
 }

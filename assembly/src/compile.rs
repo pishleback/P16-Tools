@@ -62,6 +62,17 @@ enum MemNibblePtr {
     Ram(usize),
 }
 
+impl MemNibblePtr {
+    fn offset(&self, offset: isize) -> Self {
+        match self {
+            MemNibblePtr::Rom(page, nibble) => Self::Rom(*page, nibble.wrapping_add(offset as u8)),
+            MemNibblePtr::Ram(nibble) => {
+                Self::Ram(nibble.wrapping_add(offset as usize) % (RAM_SIZE_NIBBLES as usize))
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PageLocation {
     Rom(Nibble),
@@ -93,25 +104,68 @@ pub enum AssemblyPageIdent {
 #[derive(Debug)]
 struct MemoryManager {
     memory: Memory,
-    rom_ptr: [Option<u8>; 16], // None once full
-    ram_ptr: Option<usize>,    // None once full
-    label_values: HashMap<Label, (PageLocation, u8)>,
-    label_targets: Vec<(Label, PageLocation, u8)>,
+    rom_ptr: [Option<u8>; 16],     // None once full
+    ram_nibble_ptr: Option<usize>, // None once full
+
+    // keep track of labelled locations
+    labelled_page_locations: HashMap<Label, (PageLocation, u8)>,
+    labelled_ram_addresses: HashMap<Label, u16>,
+
+    // keep track of things which are pointing at labels
+    labelled_page_location_targets: Vec<(Label, PageLocation, u8)>,
+    ram_page_targets: Vec<(usize, PageLocation, u8)>,
+    labelled_ram_address_targets: Vec<(WithPos<Label>, LayoutPagesLine, MemNibblePtr)>,
+
+    // keep track of where each RAM page is in RAM
     ram_ident_to_addr: HashMap<usize, u16>,
-    ram_addr_targets: Vec<(usize, PageLocation, u8)>,
 }
 impl MemoryManager {
     fn blank() -> Self {
         Self {
             memory: Memory::blank(),
             rom_ptr: [Some(0); 16],
-            ram_ptr: Some(0),
-            label_values: HashMap::new(),
-            label_targets: vec![],
+            ram_nibble_ptr: Some(0),
+            labelled_page_locations: HashMap::new(),
+            labelled_ram_addresses: HashMap::new(),
+            labelled_page_location_targets: vec![],
             ram_ident_to_addr: HashMap::new(),
-            ram_addr_targets: vec![],
+            labelled_ram_address_targets: vec![],
+            ram_page_targets: vec![],
         }
     }
+
+    fn inc_ram(&mut self) -> bool {
+        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+            let ram_nibble_ptr_inc = ram_nibble_ptr + 1;
+            if ram_nibble_ptr_inc < RAM_SIZE_NIBBLES as usize {
+                self.ram_nibble_ptr = Some(ram_nibble_ptr_inc);
+                true
+            } else {
+                self.ram_nibble_ptr = None;
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    // Increase self.rom_ptr until it is at the start of a new 16-bit word and return the address of that word
+    // Return None if out of memory
+    fn next_ram_word_ptr(&mut self) -> Option<u16> {
+        if let Some(mut ram_nibble_ptr) = self.ram_nibble_ptr {
+            while !ram_nibble_ptr.is_multiple_of(4) {
+                ram_nibble_ptr += 1;
+            }
+            if ram_nibble_ptr >= RAM_SIZE_NIBBLES as usize {
+                self.ram_nibble_ptr = None;
+            } else {
+                self.ram_nibble_ptr = Some(ram_nibble_ptr);
+            }
+        }
+        self.ram_nibble_ptr
+            .map(|ram_nibble_ptr| (ram_nibble_ptr / 4) as u16)
+    }
+
     fn new_page<'a>(&'a mut self, page_ident: PageIdent) -> MemoryPageManager<'a> {
         let (page, ptr) = match page_ident {
             PageIdent::Rom(nibble) => {
@@ -125,19 +179,9 @@ impl MemoryManager {
                 if self.ram_ident_to_addr.contains_key(&ident) {
                     panic!("RAM page already added with this identity");
                 }
-
-                if let Some(mut ram_ptr) = self.ram_ptr {
-                    while !ram_ptr.is_multiple_of(4) {
-                        ram_ptr += 1;
-                    }
-                    if ram_ptr >= RAM_SIZE_NIBBLES as usize {
-                        self.ram_ptr = None;
-                    } else {
-                        self.ram_ptr = Some(ram_ptr);
-                    }
-                }
+                self.next_ram_word_ptr();
                 // self.ram_ptr is now on a word boundary
-                if let Some(ram_ptr) = self.ram_ptr {
+                if let Some(ram_ptr) = self.ram_nibble_ptr {
                     let addr = (ram_ptr >> 2) as u16;
                     self.ram_ident_to_addr.insert(ident, addr);
                     (PageLocation::Ram(addr), Some(0))
@@ -155,10 +199,102 @@ impl MemoryManager {
             flags_delay_queue: (0..6).map(|_i| FlagsState { sources: vec![] }).collect(),
         }
     }
-    fn finish(mut self) -> Memory {
+
+    fn push_ram(&mut self, value: u16) -> Result<(), CompileError> {
+        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+            self.memory
+                .set_nibble(
+                    MemNibblePtr::Ram(ram_nibble_ptr),
+                    Nibble::new(((value >> 12) & 15) as u8).unwrap(),
+                )
+                .unwrap();
+        } else {
+            return Err(CompileError::RamFull);
+        }
+        self.inc_ram();
+        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+            self.memory
+                .set_nibble(
+                    MemNibblePtr::Ram(ram_nibble_ptr),
+                    Nibble::new(((value >> 8) & 15) as u8).unwrap(),
+                )
+                .unwrap();
+        } else {
+            return Err(CompileError::RamFull);
+        }
+        self.inc_ram();
+        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+            self.memory
+                .set_nibble(
+                    MemNibblePtr::Ram(ram_nibble_ptr),
+                    Nibble::new(((value >> 4) & 15) as u8).unwrap(),
+                )
+                .unwrap();
+        } else {
+            return Err(CompileError::RamFull);
+        }
+        self.inc_ram();
+        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+            self.memory
+                .set_nibble(
+                    MemNibblePtr::Ram(ram_nibble_ptr),
+                    Nibble::new((value & 15) as u8).unwrap(),
+                )
+                .unwrap();
+        } else {
+            return Err(CompileError::RamFull);
+        }
+        self.inc_ram();
+        Ok(())
+    }
+
+    fn label_ram_address(
+        &mut self,
+        label: WithPos<Label>,
+        line: LayoutPagesLine,
+    ) -> Result<(), CompileError> {
+        if let Some(ram_ptr) = self.next_ram_word_ptr() {
+            if self.labelled_ram_addresses.contains_key(&label.t) {
+                return Err(CompileError::DuplicateRamLabel {
+                    line: line.assembly_line_num,
+                    label,
+                });
+            }
+            self.labelled_ram_addresses.insert(label.t.clone(), ram_ptr);
+            Ok(())
+        } else {
+            Err(CompileError::RamFull)
+        }
+    }
+
+    fn push_labelled_ram_address(
+        &mut self,
+        label: WithPos<Label>,
+        line: LayoutPagesLine,
+    ) -> Result<(), CompileError> {
+        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+            self.labelled_ram_address_targets.push((
+                label,
+                line,
+                MemNibblePtr::Ram(ram_nibble_ptr),
+            ));
+            self.inc_ram();
+            self.inc_ram();
+            self.inc_ram();
+            if self.ram_nibble_ptr.is_none() {
+                return Err(CompileError::RamFull);
+            }
+            self.inc_ram();
+            Ok(())
+        } else {
+            Err(CompileError::RamFull)
+        }
+    }
+
+    fn finish(mut self) -> Result<Memory, CompileError> {
         // Replace labels with u8 page addresses
-        for (label, blank_page, blank_ptr) in &self.label_targets {
-            let (_target_page, target_ptr) = self.label_values.get(label).unwrap();
+        for (label, blank_page, blank_ptr) in &self.labelled_page_location_targets {
+            let (_target_page, target_ptr) = self.labelled_page_locations.get(label).unwrap();
 
             self.memory
                 .set_nibble(
@@ -174,7 +310,7 @@ impl MemoryManager {
                 .unwrap();
         }
         // Replace tagged locations with ram addresses
-        for (ident, blank_page, blank_ptr) in &self.ram_addr_targets {
+        for (ident, blank_page, blank_ptr) in &self.ram_page_targets {
             let addr = *self.ram_ident_to_addr.get(ident).unwrap();
             self.memory
                 .set_nibble(
@@ -201,7 +337,42 @@ impl MemoryManager {
                 )
                 .unwrap();
         }
-        self.memory
+        // Replace RAM labels with addresses
+        for (label, line, blank_nibble_ptr) in &self.labelled_ram_address_targets {
+            if let Some(address) = self.labelled_ram_addresses.get(&label.t).cloned() {
+                self.memory
+                    .set_nibble(
+                        blank_nibble_ptr.clone(),
+                        Nibble::new(((address >> 12) & 15) as u8).unwrap(),
+                    )
+                    .unwrap();
+                self.memory
+                    .set_nibble(
+                        blank_nibble_ptr.offset(1),
+                        Nibble::new(((address >> 8) & 15) as u8).unwrap(),
+                    )
+                    .unwrap();
+                self.memory
+                    .set_nibble(
+                        blank_nibble_ptr.offset(2),
+                        Nibble::new(((address >> 4) & 15) as u8).unwrap(),
+                    )
+                    .unwrap();
+                self.memory
+                    .set_nibble(
+                        blank_nibble_ptr.offset(3),
+                        Nibble::new((address & 15) as u8).unwrap(),
+                    )
+                    .unwrap();
+            } else {
+                return Err(CompileError::MissingRamLabel {
+                    line: line.assembly_line_num,
+                    label: label.clone(),
+                });
+            }
+        }
+
+        Ok(self.memory)
     }
 }
 
@@ -256,12 +427,14 @@ impl<'a> MemoryPageManager<'a> {
         }
     }
     // populate the flag queue with flags which could also be set here
-    fn set_possible_flushed_flags(&mut self, line: usize) {
+    fn set_possible_flushed_flags(&mut self, line: usize) -> Result<(), CompileError> {
+        self.check_is_full()?;
         let flag_state = (self.ptr.unwrap(), line);
         self.flags_as_set.sources.push(flag_state);
         for entry in &mut self.flags_delay_queue {
             entry.sources.push(flag_state);
         }
+        Ok(())
     }
     fn unreachable_flags(&mut self) {
         self.flags_as_set = FlagsState { sources: vec![] };
@@ -304,14 +477,8 @@ impl<'a> MemoryPageManager<'a> {
                 }
             }
             PageLocation::Ram(_) => {
-                if let Some(ram_ptr) = self.memory_manager.ram_ptr {
-                    let ram_ptr_inc = ram_ptr + 1;
-                    if ram_ptr_inc < RAM_SIZE_NIBBLES as usize {
-                        self.memory_manager.ram_ptr = Some(ram_ptr_inc);
-                    } else {
-                        self.ptr = None; // if we run out of RAM then we are full before the 255 nibble page is full
-                        self.memory_manager.ram_ptr = None;
-                    }
+                if !self.memory_manager.inc_ram() {
+                    self.ptr = None; // if we run out of RAM then we are full before the 255 nibble page is full
                 }
             }
         }
@@ -324,7 +491,7 @@ impl<'a> MemoryPageManager<'a> {
                 debug_assert_eq!(self.memory_manager.rom_ptr[nibble.as_usize()], self.ptr);
             }
             PageLocation::Ram(_) => {
-                if self.memory_manager.ram_ptr.is_none() {
+                if self.memory_manager.ram_nibble_ptr.is_none() {
                     debug_assert!(self.ptr.is_none());
                 }
             }
@@ -332,10 +499,26 @@ impl<'a> MemoryPageManager<'a> {
     }
     fn check_is_full(&self) -> Result<(), CompileError> {
         if self.ptr.is_none() {
-            return Err(CompileError::PageFull {
-                page: self.page_ident,
+            return Err(match self.page_ident {
+                PageIdent::Rom(nibble) => CompileError::RomPageFull { page: nibble },
+                PageIdent::Ram(_) => CompileError::RamFull,
             });
         }
+        Ok(())
+    }
+    // label a position in the program page
+    fn label_page_location(&mut self, label: Label) -> Result<(), CompileError> {
+        self.check_is_full()?;
+        if self
+            .memory_manager
+            .labelled_page_locations
+            .contains_key(&label)
+        {
+            panic!("Label already exists");
+        }
+        self.memory_manager
+            .labelled_page_locations
+            .insert(label.clone(), (self.page, self.ptr.unwrap()));
         Ok(())
     }
     fn push(&mut self, n: u8) -> Result<(), CompileError> {
@@ -347,21 +530,13 @@ impl<'a> MemoryPageManager<'a> {
         self.inc();
         Ok(())
     }
-    fn label_location(&mut self, label: Label) -> Result<(), CompileError> {
-        self.check_is_full()?;
-        if self.memory_manager.label_values.contains_key(&label) {
-            panic!("Label already exists");
-        }
-        self.memory_manager
-            .label_values
-            .insert(label.clone(), (self.page, self.ptr.unwrap()));
-        Ok(())
-    }
     fn push_labelled_page_location(&mut self, label: Label) -> Result<(), CompileError> {
         self.check_is_full()?;
-        self.memory_manager
-            .label_targets
-            .push((label, self.page, self.ptr.unwrap()));
+        self.memory_manager.labelled_page_location_targets.push((
+            label,
+            self.page,
+            self.ptr.unwrap(),
+        ));
         self.inc();
         self.check_is_full()?;
         self.inc();
@@ -370,8 +545,26 @@ impl<'a> MemoryPageManager<'a> {
     fn push_page_ram_addr(&mut self, ram_page_ident: usize) -> Result<(), CompileError> {
         self.check_is_full()?;
         self.memory_manager
-            .ram_addr_targets
+            .ram_page_targets
             .push((ram_page_ident, self.page, self.ptr.unwrap()));
+        self.inc();
+        self.inc();
+        self.inc();
+        self.check_is_full()?;
+        self.inc();
+        Ok(())
+    }
+    fn push_labelled_ram_address(
+        &mut self,
+        label: WithPos<Label>,
+        line: LayoutPagesLine,
+    ) -> Result<(), CompileError> {
+        self.check_is_full()?;
+        self.memory_manager.labelled_ram_address_targets.push((
+            label,
+            line,
+            self.page.nibble_ptr(self.ptr.unwrap()),
+        ));
         self.inc();
         self.inc();
         self.inc();
@@ -395,37 +588,42 @@ pub struct LayoutPagesSuccess {
 
 impl LayoutPagesSuccess {
     // The location(s) in the source text of this page as a list of intervals
-    pub fn get_page_text_intervals(&self, target_page_ident: &PageIdent) -> Vec<(usize, usize)> {
-        match target_page_ident {
-            PageIdent::Rom(_) => self
-                .pages
-                .iter()
-                .filter(|(page_ident, _)| {
-                    page_ident == &AssemblyPageIdent::Prog(*target_page_ident)
-                })
-                .collect::<Vec<_>>(),
-            PageIdent::Ram(_) => self
-                .pages
-                .iter()
-                .filter(|(page_ident, _)| match page_ident {
-                    AssemblyPageIdent::Prog(PageIdent::Rom(_)) => false,
-                    AssemblyPageIdent::Prog(PageIdent::Ram(_)) => true,
-                    AssemblyPageIdent::Data(_) => false,
-                })
-                .collect::<Vec<_>>(),
-        }
-        .into_iter()
-        .filter_map(|(_, lines)| {
-            if lines.is_empty() {
-                None
-            } else {
-                Some((
-                    lines.first().unwrap().line.start,
-                    lines.last().unwrap().line.end,
-                ))
-            }
-        })
-        .collect()
+    pub fn get_ram_text_intervals(&self) -> Vec<(usize, usize)> {
+        self.pages
+            .iter()
+            .filter(|(page_ident, _)| match page_ident {
+                AssemblyPageIdent::Prog(PageIdent::Rom(_)) => false,
+                AssemblyPageIdent::Prog(PageIdent::Ram(_)) => true,
+                AssemblyPageIdent::Data(_) => true,
+            })
+            .filter_map(|(_, lines)| {
+                if lines.is_empty() {
+                    None
+                } else {
+                    Some((
+                        lines.first().unwrap().line.start,
+                        lines.last().unwrap().line.end,
+                    ))
+                }
+            })
+            .collect()
+    }
+
+    pub fn get_rom_page_text_intervals(&self, page: Nibble) -> Vec<(usize, usize)> {
+        self.pages
+            .iter()
+            .filter(|(page_ident, _)| page_ident == &AssemblyPageIdent::Prog(PageIdent::Rom(page)))
+            .filter_map(|(_, lines)| {
+                if lines.is_empty() {
+                    None
+                } else {
+                    Some((
+                        lines.first().unwrap().line.start,
+                        lines.last().unwrap().line.end,
+                    ))
+                }
+            })
+            .collect()
     }
 }
 
@@ -570,6 +768,14 @@ pub enum CompileError {
         line: usize,
         label: WithPos<Label>,
     },
+    MissingRamLabel {
+        line: usize,
+        label: WithPos<Label>,
+    },
+    DuplicateRamLabel {
+        line: usize,
+        label: WithPos<Label>,
+    },
     JumpOrBranchToOtherPage {
         line: usize,
     },
@@ -583,12 +789,13 @@ pub enum CompileError {
     // BranchWithoutUseflags {
     //     branch_line: usize,
     // },
-    PageFull {
-        page: PageIdent,
+    RomPageFull {
+        page: Nibble,
     },
     InvalidCommandLocation {
         line: usize,
     },
+    RamFull,
 }
 
 pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSuccess, CompileError> {
@@ -608,31 +815,27 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                 let mut code = code.new_page(page);
                 let mut useflag_saved_flag_state: Option<(FlagsState, usize)> = None; // (place where flags were set, assembly line of .USEFLAGS)
                 let mut page_lines = vec![];
-                for LayoutPagesLine {
-                    line,
-                    assembly_line_num: line_num,
-                } in lines
-                {
+                for line in lines {
                     let start = code.ptr.map(|p| p as usize).unwrap_or(256);
 
-                    match line.t.clone() {
+                    match line.line.t.clone() {
                         Line::Command(command) => {
                             match command {
                                 crate::assembly::Command::Pass => {
                                     code.push(0)?;
                                 }
                                 crate::assembly::Command::Raw(nibbles) => {
-                                    code.set_possible_flushed_flags(line_num);
+                                    code.set_possible_flushed_flags(line.assembly_line_num)?;
                                     for nibble in &nibbles.t {
                                         code.push(nibble.t.as_u8())?;
                                     }
                                 }
                                 crate::Command::RawLabel(label) => {
-                                    code.set_possible_flushed_flags(line_num);
+                                    code.set_possible_flushed_flags(line.assembly_line_num)?;
                                     let target_page = label_to_page.get(&label.t);
                                     if target_page.is_none() {
                                         return Err(CompileError::MissingLabel {
-                                            line: line_num,
+                                            line: line.assembly_line_num,
                                             label,
                                         });
                                     }
@@ -641,7 +844,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 crate::assembly::Command::Value(WithPos { t: v, .. }) => {
                                     if v.is_none() {
                                         return Err(CompileError::Invalid16BitValue {
-                                            line: line_num,
+                                            line: line.assembly_line_num,
                                         });
                                     }
                                     let v = v.unwrap();
@@ -655,18 +858,22 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(b)?;
                                     code.push(a)?;
                                 }
+                                crate::Command::AddressValue(label) => {
+                                    code.push(1)?;
+                                    code.push_labelled_ram_address(label, line.clone())?;
+                                }
                                 crate::assembly::Command::Jump(label) => {
                                     code.unreachable_flags();
                                     let target_page = label_to_page.get(&label.t);
                                     if target_page.is_none() {
                                         return Err(CompileError::MissingLabel {
-                                            line: line_num,
+                                            line: line.assembly_line_num,
                                             label,
                                         });
                                     }
                                     if page != *target_page.unwrap() {
                                         return Err(CompileError::JumpOrBranchToOtherPage {
-                                            line: line_num,
+                                            line: line.assembly_line_num,
                                         });
                                     }
                                     code.push(2)?;
@@ -676,13 +883,13 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     let target_page = label_to_page.get(&label.t);
                                     if target_page.is_none() {
                                         return Err(CompileError::MissingLabel {
-                                            line: line_num,
+                                            line: line.assembly_line_num,
                                             label,
                                         });
                                     }
                                     if page != *target_page.unwrap() {
                                         return Err(CompileError::JumpOrBranchToOtherPage {
-                                            line: line_num,
+                                            line: line.assembly_line_num,
                                         });
                                     }
                                     match useflag_saved_flag_state {
@@ -699,7 +906,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                                     if flags != current_branch_flags {
                                                         return Err(
                                                             CompileError::BadUseflagsWithBranch {
-                                                                branch_line: line_num,
+                                                                branch_line: line.assembly_line_num,
                                                                 useflags_line:
                                                                     useflags_assembly_line,
                                                             },
@@ -707,7 +914,10 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                                     }
                                                 }
                                             }
-                                            branch_lines.insert(line_num, useflags_assembly_line);
+                                            branch_lines.insert(
+                                                line.assembly_line_num,
+                                                useflags_assembly_line,
+                                            );
                                         }
                                         None => {
                                             // all branches require a .USEFLAGS first
@@ -749,12 +959,12 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Call(label) => {
-                                    code.set_possible_flushed_flags(line_num);
+                                    code.set_possible_flushed_flags(line.assembly_line_num)?;
                                     code.flush_flags();
                                     let target_page = label_to_page.get(&label.t);
                                     if target_page.is_none() {
                                         return Err(CompileError::MissingLabel {
-                                            line: line_num,
+                                            line: line.assembly_line_num,
                                             label,
                                         });
                                     }
@@ -783,7 +993,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(7)?;
                                 }
                                 crate::assembly::Command::Add(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(8)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
@@ -797,7 +1007,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(0)?;
                                 }
                                 crate::assembly::Command::Not => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(1)?;
                                 }
@@ -810,62 +1020,62 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(3)?;
                                 }
                                 crate::assembly::Command::Increment => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(4)?;
                                 }
                                 crate::assembly::Command::IncrementWithCarry => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(5)?;
                                 }
                                 crate::assembly::Command::Decrement => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(6)?;
                                 }
                                 crate::assembly::Command::DecrementWithCarry => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(7)?;
                                 }
                                 crate::assembly::Command::Negate => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(8)?;
                                 }
                                 crate::assembly::Command::NegateWithCarry => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(9)?;
                                 }
                                 crate::assembly::Command::NoopSetFlags => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(10)?;
                                 }
                                 crate::assembly::Command::PopSetFlags => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(11)?;
                                 }
                                 crate::assembly::Command::RightShift => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(12)?;
                                 }
                                 crate::assembly::Command::RightShiftCarryIn => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(13)?;
                                 }
                                 crate::assembly::Command::RightShiftOneIn => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(14)?;
                                 }
                                 crate::assembly::Command::ArithmeticRightShift => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(10)?;
                                     code.push(15)?;
                                 }
@@ -875,7 +1085,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Sub(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(1)?;
                                     code.push(nibble.t.as_u8())?;
@@ -891,79 +1101,79 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::And(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(4)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Nand(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(5)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Or(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(6)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Nor(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(7)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Xor(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(8)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::NXor(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(9)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::RegToFlags(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(10)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Compare(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(11)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::SwapAdd(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(12)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::SwapSub(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(13)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::AddWithCarry(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(14)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::SubWithCarry(nibble) => {
-                                    code.set_flags(line_num);
+                                    code.set_flags(line.assembly_line_num);
                                     code.push(11)?;
                                     code.push(15)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::RawRamCall => {
-                                    code.set_possible_flushed_flags(line_num);
+                                    code.set_possible_flushed_flags(line.assembly_line_num)?;
                                     code.flush_flags();
                                     code.push(13)?;
                                 }
@@ -989,7 +1199,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 }
                                 crate::Command::Alloc(_) => {
                                     return Err(CompileError::InvalidCommandLocation {
-                                        line: line_num,
+                                        line: line.assembly_line_num,
                                     });
                                 }
                             }
@@ -999,25 +1209,24 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             Meta::RamPage => unreachable!(),
                             Meta::Data => unreachable!(),
                             Meta::Label(label) => {
-                                code.set_possible_flushed_flags(line_num);
-                                code.label_location(label.t)?;
+                                code.set_possible_flushed_flags(line.assembly_line_num)?; // something could goto here so we don't know what the flags are now
+                                code.label_page_location(label.t)?;
                             }
                             Meta::UseFlags => {
                                 useflag_saved_flag_state =
-                                    Some((code.flags_as_set.clone(), line_num));
+                                    Some((code.flags_as_set.clone(), line.assembly_line_num));
                                 useflag_lines.insert(
-                                    line_num,
+                                    line.assembly_line_num,
                                     code.flags_as_set.sources.iter().map(|x| x.1).collect(),
                                 );
                             }
-                            Meta::Comment(..) => {}
                         },
                     }
 
                     let end = code.ptr.map(|p| p as usize).unwrap_or(256);
                     page_lines.push(CompiledLine {
-                        line,
-                        assembly_line_num: line_num,
+                        assembly_line_num: line.assembly_line_num,
+                        line: line.line,
                         page_start: start,
                         page_end: end,
                     });
@@ -1052,36 +1261,47 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                 }
             }
             AssemblyPageIdent::Data(_) => {
-                for LayoutPagesLine {
-                    line,
-                    assembly_line_num: line_num,
-                } in lines
-                {
-                    match line.t {
+                for line in lines {
+                    match line.line.t.clone() {
                         Line::Command(command) => match command {
-                            crate::Command::Value(_) => {}
+                            crate::Command::Value(WithPos { t: v, .. }) => {
+                                if v.is_none() {
+                                    return Err(CompileError::Invalid16BitValue {
+                                        line: line.assembly_line_num,
+                                    });
+                                }
+                                code.push_ram(v.unwrap())?;
+                            }
+                            crate::Command::AddressValue(label) => {
+                                code.push_labelled_ram_address(label, line.clone())?;
+                            }
                             crate::Command::Alloc(v) => {
                                 if v.t.is_none() {
-                                        return Err(CompileError::Invalid16BitValue {
-                                            line: line_num,
-                                        });
-                                    }
+                                    return Err(CompileError::Invalid16BitValue {
+                                        line: line.assembly_line_num,
+                                    });
+                                }
+                                let quantity = v.t.unwrap();
+                                for _ in 0..quantity {
+                                    code.push_ram(0)?;
+                                }
                             }
                             _ => {
                                 return Err(CompileError::InvalidCommandLocation {
-                                    line: line_num,
+                                    line: line.assembly_line_num,
                                 });
                             }
                         },
                         Line::Meta(meta) => match meta {
                             Meta::RomPage(_) | Meta::RamPage | Meta::Data => unreachable!(),
-                            Meta::Label(_) => {}
+                            Meta::Label(label) => {
+                                code.label_ram_address(label, line)?;
+                            }
                             Meta::UseFlags => {
                                 return Err(CompileError::InvalidCommandLocation {
-                                    line: line_num,
+                                    line: line.assembly_line_num,
                                 });
                             }
-                            Meta::Comment(_) => {}
                         },
                     }
                 }
@@ -1089,7 +1309,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
         }
     }
 
-    let memory = code.finish();
+    let memory = code.finish()?;
     let program_memory = memory.finish();
 
     Ok(CompileSuccess {
