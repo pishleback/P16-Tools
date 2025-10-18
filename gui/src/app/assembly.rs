@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use crate::app::state::State;
-use assembly::{Command, FullCompileResult, Label, WithPos};
+use assembly::{
+    Command, CompileError, FullCompileResult, Label, LayoutPagesError, Line, Meta, Nibble, WithPos,
+};
 use btree_range_map::RangeMap;
 use egui::{Color32, Stroke, TextBuffer, TextFormat, Visuals, text::LayoutJob};
 
@@ -107,108 +109,120 @@ fn layout_job(
                 };
 
                 // registers
-                let add_register =
-                    |text_attrs: &mut TextAttrs, register: &WithPos<assembly::Nibble>| {
-                        text_attrs.colour.insert(
-                            register.start..register.end,
-                            visuals.text_color().lerp_to_gamma(Color32::YELLOW, 0.5),
-                        );
-                    };
+                let add_register = |text_attrs: &mut TextAttrs, register: &WithPos<Nibble>| {
+                    text_attrs.colour.insert(
+                        register.start..register.end,
+                        visuals.text_color().lerp_to_gamma(Color32::YELLOW, 0.5),
+                    );
+                };
+
+                // values
+                let add_value = |text_attrs: &mut TextAttrs, value: &WithPos<Option<u16>>| {
+                    text_attrs.colour.insert(
+                        value.start..value.end,
+                        visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
+                    );
+                };
 
                 // syntax highlighting
                 match line {
-                    assembly::Line::Command(command) => match command {
-                        assembly::Command::Value(v) => {
-                            text_attrs.colour.insert(
-                                v.start..v.end,
-                                visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
-                            );
+                    Line::Command(command) => match command {
+                        Command::Value(v) => {
+                            add_value(&mut text_attrs, v);
                         }
-                        assembly::Command::Push(register)
-                        | assembly::Command::Pop(register)
-                        | assembly::Command::Add(register)
-                        | assembly::Command::Swap(register)
-                        | assembly::Command::Sub(register)
-                        | assembly::Command::Write(register)
-                        | assembly::Command::WritePop(register)
-                        | assembly::Command::And(register)
-                        | assembly::Command::Nand(register)
-                        | assembly::Command::Or(register)
-                        | assembly::Command::Nor(register)
-                        | assembly::Command::Xor(register)
-                        | assembly::Command::NXor(register)
-                        | assembly::Command::RegToFlags(register)
-                        | assembly::Command::Compare(register)
-                        | assembly::Command::SwapAdd(register)
-                        | assembly::Command::SwapSub(register)
-                        | assembly::Command::AddWithCarry(register)
-                        | assembly::Command::SubWithCarry(register) => {
+                        Command::Push(register)
+                        | Command::Pop(register)
+                        | Command::Add(register)
+                        | Command::Swap(register)
+                        | Command::Sub(register)
+                        | Command::Write(register)
+                        | Command::WritePop(register)
+                        | Command::And(register)
+                        | Command::Nand(register)
+                        | Command::Or(register)
+                        | Command::Nor(register)
+                        | Command::Xor(register)
+                        | Command::NXor(register)
+                        | Command::RegToFlags(register)
+                        | Command::Compare(register)
+                        | Command::SwapAdd(register)
+                        | Command::SwapSub(register)
+                        | Command::AddWithCarry(register)
+                        | Command::SubWithCarry(register) => {
                             add_register(&mut text_attrs, register);
                         }
-                        assembly::Command::AddressValue(label) => {
+                        Command::ValueLabelled(label) => {
                             add_label(&mut text_attrs, label);
                         }
-                        assembly::Command::Jump(label) => {
+                        Command::Jump(label) => {
                             add_label(&mut text_attrs, label);
                         }
-                        assembly::Command::Branch(condition, label) => {
+                        Command::Branch(condition, label) => {
                             text_attrs.colour.insert(
                                 condition.start..condition.end,
                                 visuals.text_color().lerp_to_gamma(Color32::BROWN, 0.5),
                             );
                             add_label(&mut text_attrs, label);
                         }
-                        assembly::Command::Call(label) => {
+                        Command::Call(label) => {
                             add_label(&mut text_attrs, label);
                         }
-                        assembly::Command::Rotate { shift, register } => {
+                        Command::Rotate { shift, register } => {
                             text_attrs.colour.insert(
                                 shift.start..shift.end,
                                 visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
                             );
                             add_register(&mut text_attrs, register);
                         }
-                        assembly::Command::Output(path) => {
+                        Command::Output(path) => {
                             text_attrs.colour.insert(
                                 path.start..path.end,
                                 visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
                             );
                         }
-                        assembly::Command::Raw(n) => {
+                        Command::Raw(n) => {
                             text_attrs.colour.insert(
                                 n.start..n.end,
                                 visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
                             );
                         }
-                        assembly::Command::RawLabel(label) => {
+                        Command::RawLabel(label) => {
                             add_label(&mut text_attrs, label);
                         }
-                        assembly::Command::Alloc(quantity) => {
+                        Command::Alloc(quantity) => {
                             text_attrs
                                 .colour
                                 .insert(quantity.start..quantity.end, visuals.text_color());
                         }
+                        Command::AllocLabelled(label) => {
+                            add_label(&mut text_attrs, label);
+                        }
                         _ => {}
                     },
-                    assembly::Line::Meta(meta) => match meta {
-                        assembly::Meta::Label(label) => {
+                    Line::Meta(meta) => match meta {
+                        Meta::Label(label) => {
                             text_attrs.italics.insert(*start..label.end, true);
                             add_label(&mut text_attrs, label);
                         }
-                        assembly::Meta::RomPage(page) => {
+                        Meta::RomPage(page) => {
                             text_attrs.italics.insert(*start..page.end, true);
                             text_attrs
                                 .colour
                                 .insert(page.start..page.end, visuals.strong_text_color());
                         }
-                        assembly::Meta::RamPage => {
+                        Meta::RamPage => {
                             text_attrs.italics.insert(*start..*end, true);
                         }
-                        assembly::Meta::Data => {
+                        Meta::Data => {
                             text_attrs.italics.insert(*start..*end, true);
                         }
-                        assembly::Meta::UseFlags => {
+                        Meta::UseFlags => {
                             text_attrs.italics.insert(*start..*end, true);
+                        }
+                        Meta::Constant(label, value) => {
+                            text_attrs.italics.insert(*start..*end, true);
+                            add_label(&mut text_attrs, label);
+                            add_value(&mut text_attrs, value);
                         }
                     },
                 }
@@ -224,7 +238,7 @@ fn layout_job(
                             {
                                 #[allow(clippy::single_match)]
                                 match &line.t {
-                                    assembly::Line::Command(command) => match command {
+                                    Line::Command(command) => match command {
                                         Command::Branch(_, _) => {
                                             if selected_lines.len() == 1
                                                 && selected_lines.contains(&line_num)
@@ -256,8 +270,8 @@ fn layout_job(
                                         }
                                         _ => {}
                                     },
-                                    assembly::Line::Meta(meta) => match meta {
-                                        assembly::Meta::UseFlags => {
+                                    Line::Meta(meta) => match meta {
+                                        Meta::UseFlags => {
                                             if selected_lines.len() == 1
                                                 && selected_lines.contains(&line_num)
                                             {
@@ -285,14 +299,13 @@ fn layout_job(
                         }
                     }
                     Err(e) => match e {
-                        assembly::CompileError::Invalid16BitValue { line } => {
+                        CompileError::Invalid16BitValue { line } => {
                             let line = assembly.line_with_pos(*line);
                             match &line.t {
-                                assembly::Line::Command(Command::Value(v))
-                                | assembly::Line::Command(Command::Alloc(v)) => {
+                                Line::Command(Command::Value(v))
+                                | Line::Command(Command::Alloc(v)) => {
                                     text_attrs.underline.insert(v.start..v.end, red_underline);
                                 }
-
                                 _ => {
                                     text_attrs
                                         .underline
@@ -300,13 +313,13 @@ fn layout_job(
                                 }
                             }
                         }
-                        assembly::CompileError::MissingLabel { line, .. } => {
+                        CompileError::MissingLabel { line, .. } => {
                             let line = assembly.line_with_pos(*line);
                             match &line.t {
-                                assembly::Line::Command(Command::Jump(label))
-                                | assembly::Line::Command(Command::Branch(_, label))
-                                | assembly::Line::Command(Command::Call(label))
-                                | assembly::Line::Command(Command::RawLabel(label)) => {
+                                Line::Command(Command::Jump(label))
+                                | Line::Command(Command::Branch(_, label))
+                                | Line::Command(Command::Call(label))
+                                | Line::Command(Command::RawLabel(label)) => {
                                     text_attrs
                                         .underline
                                         .insert(label.start..label.end, red_underline);
@@ -316,10 +329,11 @@ fn layout_job(
                                 ),
                             }
                         }
-                        assembly::CompileError::MissingRamLabel { line, .. } => {
+                        CompileError::MissingConstLabel { line, .. } => {
                             let line = assembly.line_with_pos(*line);
                             match &line.t {
-                                assembly::Line::Command(Command::AddressValue(label)) => {
+                                Line::Command(Command::ValueLabelled(label))
+                                | Line::Command(Command::AllocLabelled(label)) => {
                                     text_attrs
                                         .underline
                                         .insert(label.start..label.end, red_underline);
@@ -329,17 +343,17 @@ fn layout_job(
                                 ),
                             }
                         }
-                        assembly::CompileError::DuplicateRamLabel { line, .. } => {
+                        CompileError::DuplicateConstLabel { line, .. } => {
                             let line = assembly.line_with_pos(*line);
                             text_attrs
                                 .underline
                                 .insert(line.start..line.end, red_underline);
                         }
-                        assembly::CompileError::JumpOrBranchToOtherPage { line } => {
+                        CompileError::JumpOrBranchToOtherPage { line } => {
                             let line = assembly.line_with_pos(*line);
                             match &line.t {
-                                assembly::Line::Command(Command::Jump(label))
-                                | assembly::Line::Command(Command::Branch(_, label)) => {
+                                Line::Command(Command::Jump(label))
+                                | Line::Command(Command::Branch(_, label)) => {
                                     text_attrs
                                         .underline
                                         .insert(label.start..label.end, red_underline);
@@ -349,7 +363,7 @@ fn layout_job(
                                 ),
                             }
                         }
-                        assembly::CompileError::BadUseflagsWithBranch {
+                        CompileError::BadUseflagsWithBranch {
                             branch_line,
                             useflags_line,
                         } => {
@@ -362,26 +376,26 @@ fn layout_job(
                                 .underline
                                 .insert(useflags_line.start..useflags_line.end, red_underline);
                         }
-                        assembly::CompileError::BadUseflags { useflags_line } => {
+                        CompileError::BadUseflags { useflags_line } => {
                             let useflags_line = assembly.line_with_pos(*useflags_line);
                             text_attrs
                                 .underline
                                 .insert(useflags_line.start..useflags_line.end, red_underline);
                         }
 
-                        assembly::CompileError::RomPageFull { page } => {
+                        CompileError::RomPageFull { page } => {
                             for (start, end) in page_layout.get_rom_page_text_intervals(*page) {
                                 text_attrs.underline.insert(start..end, red_underline);
                             }
                         }
 
-                        assembly::CompileError::RamFull => {
+                        CompileError::RamFull => {
                             for (start, end) in page_layout.get_ram_text_intervals() {
                                 text_attrs.underline.insert(start..end, red_underline);
                             }
                         }
 
-                        assembly::CompileError::InvalidCommandLocation { line } => {
+                        CompileError::InvalidCommandLocation { line } => {
                             let line = assembly.line_with_pos(*line);
                             text_attrs
                                 .underline
@@ -390,15 +404,30 @@ fn layout_job(
                     },
                 },
                 Err(e) => match e {
-                    assembly::LayoutPagesError::DuplicateLabel { line, .. } => {
+                    LayoutPagesError::DuplicateLabel { line, .. } => {
                         let line = assembly.line_with_pos(*line);
                         text_attrs
                             .underline
                             .insert(line.start..line.end, red_underline);
                     }
-                    assembly::LayoutPagesError::MissingPageStart { line } => {
+                    LayoutPagesError::Invalid16BitConstValue { line } => {
                         let line = assembly.line_with_pos(*line);
-                        text_attrs.underline.insert(0..line.end, red_underline);
+                        match &line.t {
+                            Line::Meta(Meta::Constant(_, v)) => {
+                                text_attrs.underline.insert(v.start..v.end, red_underline);
+                            }
+                            _ => {
+                                text_attrs
+                                    .underline
+                                    .insert(line.start..line.end, red_underline);
+                            }
+                        }
+                    }
+                    LayoutPagesError::DuplicateConstLabel { line, .. } => {
+                        let line = assembly.line_with_pos(*line);
+                        text_attrs
+                            .underline
+                            .insert(line.start..line.end, red_underline);
                     }
                 },
             }

@@ -69,19 +69,21 @@ impl State {
                                             .color(Color32::RED),
                                         );
                                     }
-                                    assembly::CompileError::MissingRamLabel { label, .. } => {
+                                    assembly::CompileError::MissingConstLabel { label, .. } => {
                                         ui.label(
                                             RichText::new(format!(
-                                                "RAM address label `{}` not defined.",
+                                                "Const label `{}` not defined.",
                                                 label.t.to_string()
                                             ))
                                             .color(Color32::RED),
                                         );
                                     }
-                                    assembly::CompileError::DuplicateRamLabel { label, .. } => {
+                                    assembly::CompileError::DuplicateConstLabel {
+                                        label, ..
+                                    } => {
                                         ui.label(
                                             RichText::new(format!(
-                                                "Duplicate RAM Label Definition: `{}`",
+                                                "Duplicate Const label definition: `{}`",
                                                 label.t.to_string()
                                             ))
                                             .color(Color32::RED),
@@ -136,18 +138,24 @@ possible to fix with extra PASS instructions.",
                                 assembly::LayoutPagesError::DuplicateLabel { label, .. } => {
                                     ui.label(
                                         RichText::new(format!(
-                                            "Duplicate Label Definition: `{label}`"
+                                            "Duplicate label: `{}`",
+                                            label.t.to_string()
                                         ))
                                         .color(Color32::RED),
                                     );
                                 }
-                                assembly::LayoutPagesError::MissingPageStart { .. } => {
+                                assembly::LayoutPagesError::Invalid16BitConstValue { line } => {
                                     ui.label(
-                                        RichText::new(
-                                            "\
-Missing page definition. Add `..ROM <page>` or `..RAM` before instructions."
-                                                .to_string(),
-                                        )
+                                        RichText::new("Invalid 16-bit constant value.")
+                                            .color(Color32::RED),
+                                    );
+                                }
+                                assembly::LayoutPagesError::DuplicateConstLabel { line, label } => {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "Duplicate label: `{}`",
+                                            label.t.to_string()
+                                        ))
                                         .color(Color32::RED),
                                     );
                                 }

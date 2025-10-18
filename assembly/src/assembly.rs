@@ -48,7 +48,7 @@ pub enum Command {
     Raw(WithPos<Vec<WithPos<Nibble>>>),
     RawLabel(WithPos<Label>),
     Value(WithPos<Option<u16>>), // None if out of range
-    AddressValue(WithPos<Label>),
+    ValueLabelled(WithPos<Label>),
     Jump(WithPos<Label>),
     Branch(WithPos<Condition>, WithPos<Label>),
     Push(WithPos<Nibble>),
@@ -102,6 +102,7 @@ pub enum Command {
     Output(WithPos<Vec<WithPos<OctDigit>>>),
 
     Alloc(WithPos<Option<u16>>), // None if out of range
+    AllocLabelled(WithPos<Label>),
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +112,7 @@ pub enum Meta {
     Data,
     Label(WithPos<Label>),
     UseFlags,
+    Constant(WithPos<Label>, WithPos<Option<u16>>), // None if out of range
 }
 
 #[derive(Debug, Clone)]

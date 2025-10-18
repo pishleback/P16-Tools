@@ -26,9 +26,17 @@ There are 16 pages of program ROM in all. The levers on top are page 0. The othe
 
 Example assembly files can be found in the `examples` folder.
 
-## Instructions
+## Hardware
 
 There are 16 general purpose registers and a data stack.
+
+## Instructions
+
+Constants may be defined anywhere in the assembly.
+
+| Assembly                     | Description                                         |
+| :--------------------------- | :---------------------------------------------------|
+| `.CONSTANT <label> <value>`  | Define the constant `value` and call it `label`.    |
 
 The table below describes the assembly commands and what they do. The last column describes how the instruction is translated into machine code, represented as a string of hexadecimal digits 0-9|A-F with lower case letters representing a hexadecimal digit with a variable value.
 

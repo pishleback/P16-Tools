@@ -1,3 +1,5 @@
+use clap::Command;
+
 use crate::{
     assembly::{Assembly, Label, Line, Meta},
     WithPos, RAM_SIZE_NIBBLES,
@@ -97,6 +99,7 @@ pub enum PageIdent {
 // A page in assembly
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssemblyPageIdent {
+    Initial,
     Data(usize),
     Prog(PageIdent),
 }
@@ -109,12 +112,12 @@ struct MemoryManager {
 
     // keep track of labelled locations
     labelled_page_locations: HashMap<Label, (PageLocation, u8)>,
-    labelled_ram_addresses: HashMap<Label, u16>,
+    labelled_constants: HashMap<Label, u16>,
 
     // keep track of things which are pointing at labels
     labelled_page_location_targets: Vec<(Label, PageLocation, u8)>,
     ram_page_targets: Vec<(usize, PageLocation, u8)>,
-    labelled_ram_address_targets: Vec<(WithPos<Label>, LayoutPagesLine, MemNibblePtr)>,
+    labelled_constant_targets: Vec<(WithPos<Label>, LayoutPagesLine, MemNibblePtr)>,
 
     // keep track of where each RAM page is in RAM
     ram_ident_to_addr: HashMap<usize, u16>,
@@ -126,10 +129,10 @@ impl MemoryManager {
             rom_ptr: [Some(0); 16],
             ram_nibble_ptr: Some(0),
             labelled_page_locations: HashMap::new(),
-            labelled_ram_addresses: HashMap::new(),
+            labelled_constants: HashMap::new(),
             labelled_page_location_targets: vec![],
             ram_ident_to_addr: HashMap::new(),
-            labelled_ram_address_targets: vec![],
+            labelled_constant_targets: vec![],
             ram_page_targets: vec![],
         }
     }
@@ -201,6 +204,9 @@ impl MemoryManager {
     }
 
     fn push_ram(&mut self, value: u16) -> Result<(), CompileError> {
+        if self.next_ram_word_ptr().is_none() {
+            return Err(CompileError::RamFull);
+        }
         if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
             self.memory
                 .set_nibble(
@@ -248,20 +254,29 @@ impl MemoryManager {
         Ok(())
     }
 
+    fn label_constant(
+        &mut self,
+        label: WithPos<Label>,
+        line: LayoutPagesLine,
+        value: u16,
+    ) -> Result<(), CompileError> {
+        if self.labelled_constants.contains_key(&label.t) {
+            return Err(CompileError::DuplicateConstLabel {
+                line: line.assembly_line_num,
+                label,
+            });
+        }
+        self.labelled_constants.insert(label.t.clone(), value);
+        Ok(())
+    }
+
     fn label_ram_address(
         &mut self,
         label: WithPos<Label>,
         line: LayoutPagesLine,
     ) -> Result<(), CompileError> {
         if let Some(ram_ptr) = self.next_ram_word_ptr() {
-            if self.labelled_ram_addresses.contains_key(&label.t) {
-                return Err(CompileError::DuplicateRamLabel {
-                    line: line.assembly_line_num,
-                    label,
-                });
-            }
-            self.labelled_ram_addresses.insert(label.t.clone(), ram_ptr);
-            Ok(())
+            self.label_constant(label, line, ram_ptr)
         } else {
             Err(CompileError::RamFull)
         }
@@ -273,11 +288,8 @@ impl MemoryManager {
         line: LayoutPagesLine,
     ) -> Result<(), CompileError> {
         if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
-            self.labelled_ram_address_targets.push((
-                label,
-                line,
-                MemNibblePtr::Ram(ram_nibble_ptr),
-            ));
+            self.labelled_constant_targets
+                .push((label, line, MemNibblePtr::Ram(ram_nibble_ptr)));
             self.inc_ram();
             self.inc_ram();
             self.inc_ram();
@@ -338,8 +350,8 @@ impl MemoryManager {
                 .unwrap();
         }
         // Replace RAM labels with addresses
-        for (label, line, blank_nibble_ptr) in &self.labelled_ram_address_targets {
-            if let Some(address) = self.labelled_ram_addresses.get(&label.t).cloned() {
+        for (label, line, blank_nibble_ptr) in &self.labelled_constant_targets {
+            if let Some(address) = self.labelled_constants.get(&label.t).cloned() {
                 self.memory
                     .set_nibble(
                         blank_nibble_ptr.clone(),
@@ -365,7 +377,7 @@ impl MemoryManager {
                     )
                     .unwrap();
             } else {
-                return Err(CompileError::MissingRamLabel {
+                return Err(CompileError::MissingConstLabel {
                     line: line.assembly_line_num,
                     label: label.clone(),
                 });
@@ -560,7 +572,7 @@ impl<'a> MemoryPageManager<'a> {
         line: LayoutPagesLine,
     ) -> Result<(), CompileError> {
         self.check_is_full()?;
-        self.memory_manager.labelled_ram_address_targets.push((
+        self.memory_manager.labelled_constant_targets.push((
             label,
             line,
             self.page.nibble_ptr(self.ptr.unwrap()),
@@ -584,6 +596,7 @@ pub struct LayoutPagesLine {
 pub struct LayoutPagesSuccess {
     pages: Vec<(AssemblyPageIdent, Vec<LayoutPagesLine>)>,
     label_to_page: HashMap<Label, PageIdent>,
+    labelled_constants: HashMap<Label, u16>,
 }
 
 impl LayoutPagesSuccess {
@@ -592,6 +605,7 @@ impl LayoutPagesSuccess {
         self.pages
             .iter()
             .filter(|(page_ident, _)| match page_ident {
+                AssemblyPageIdent::Initial => false,
                 AssemblyPageIdent::Prog(PageIdent::Rom(_)) => false,
                 AssemblyPageIdent::Prog(PageIdent::Ram(_)) => true,
                 AssemblyPageIdent::Data(_) => true,
@@ -629,52 +643,45 @@ impl LayoutPagesSuccess {
 
 #[derive(Debug, Clone)]
 pub enum LayoutPagesError {
-    DuplicateLabel { line: usize, label: String },
-    MissingPageStart { line: usize },
+    Invalid16BitConstValue { line: usize },
+    DuplicateLabel { line: usize, label: WithPos<Label> },
+    DuplicateConstLabel { line: usize, label: WithPos<Label> },
 }
 
 pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPagesError> {
-    let mut pages: Vec<(AssemblyPageIdent, Vec<LayoutPagesLine>)> = vec![];
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum CurrentSection {
-        Unset,
-        Prog(usize), // index in pages
-    }
-    let mut current_section = CurrentSection::Unset;
+    let mut pages: Vec<(AssemblyPageIdent, Vec<LayoutPagesLine>)> =
+        vec![(AssemblyPageIdent::Initial, vec![])];
+    let mut current_page = 0;
 
     let mut label_to_page: HashMap<Label, PageIdent> = HashMap::new();
+    let mut labelled_constants = HashMap::new();
 
     let mut ram_page_ident_counter = 0;
     let mut data_page_ident_counter = 0;
     for (line_num, &line) in assembly.lines_with_pos().iter().enumerate() {
         if let crate::assembly::Line::Meta(Meta::Label(label)) = &line.t {
-            match current_section {
-                CurrentSection::Unset => {
-                    return Err(LayoutPagesError::MissingPageStart { line: line_num });
-                }
-                CurrentSection::Prog(idx) => match pages[idx].0 {
-                    AssemblyPageIdent::Data(_) => {}
-                    AssemblyPageIdent::Prog(page) => {
-                        if label_to_page.contains_key(&label.t) {
-                            return Err(LayoutPagesError::DuplicateLabel {
-                                line: line_num,
-                                label: label.t.to_string().clone(),
-                            });
-                        }
-                        label_to_page.insert(label.t.clone(), page);
+            match pages[current_page].0 {
+                AssemblyPageIdent::Initial => {}
+                AssemblyPageIdent::Data(_) => {}
+                AssemblyPageIdent::Prog(page) => {
+                    if label_to_page.contains_key(&label.t) {
+                        return Err(LayoutPagesError::DuplicateLabel {
+                            line: line_num,
+                            label: label.clone(),
+                        });
                     }
-                },
+                    label_to_page.insert(label.t.clone(), page);
+                }
             }
         }
 
         match &line.t {
             crate::assembly::Line::Meta(Meta::RomPage(n)) => {
-                current_section = CurrentSection::Prog(pages.len());
+                current_page = pages.len();
                 pages.push((AssemblyPageIdent::Prog(PageIdent::Rom(n.t)), vec![]));
             }
             crate::assembly::Line::Meta(Meta::RamPage) => {
-                current_section = CurrentSection::Prog(pages.len());
+                current_page = pages.len();
                 pages.push((
                     AssemblyPageIdent::Prog(PageIdent::Ram(ram_page_ident_counter)),
                     vec![],
@@ -682,17 +689,24 @@ pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPag
                 ram_page_ident_counter += 1;
             }
             crate::assembly::Line::Meta(Meta::Data) => {
-                current_section = CurrentSection::Prog(pages.len());
+                current_page = pages.len();
                 pages.push((AssemblyPageIdent::Data(data_page_ident_counter), vec![]));
                 data_page_ident_counter += 1;
             }
+            crate::assembly::Line::Meta(Meta::Constant(label, value)) => {
+                if value.t.is_none() {
+                    return Err(LayoutPagesError::Invalid16BitConstValue { line: line_num });
+                }
+                if labelled_constants.contains_key(&label.t) {
+                    return Err(LayoutPagesError::DuplicateConstLabel {
+                        line: line_num,
+                        label: label.clone(),
+                    });
+                }
+                labelled_constants.insert(label.t.clone(), value.t.unwrap());
+            }
             _ => {
-                let lines = match current_section {
-                    CurrentSection::Unset => {
-                        return Err(LayoutPagesError::MissingPageStart { line: line_num });
-                    }
-                    CurrentSection::Prog(idx) => &mut pages[idx].1,
-                };
+                let lines = &mut pages[current_page].1;
                 lines.push(LayoutPagesLine {
                     line: line.clone(),
                     assembly_line_num: line_num,
@@ -704,6 +718,7 @@ pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPag
     Ok(LayoutPagesSuccess {
         pages,
         label_to_page,
+        labelled_constants,
     })
 }
 
@@ -768,11 +783,11 @@ pub enum CompileError {
         line: usize,
         label: WithPos<Label>,
     },
-    MissingRamLabel {
+    MissingConstLabel {
         line: usize,
         label: WithPos<Label>,
     },
-    DuplicateRamLabel {
+    DuplicateConstLabel {
         line: usize,
         label: WithPos<Label>,
     },
@@ -809,8 +824,22 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
     let mut branch_lines: HashMap<usize, usize> = HashMap::new();
 
     let mut code = MemoryManager::blank();
+    code.labelled_constants = page_layout.labelled_constants.clone();
     for (page, lines) in pages {
         match page {
+            AssemblyPageIdent::Initial => {
+                for line in lines {
+                    match line.line.t.clone() {
+                        Line::Meta(Meta::Constant(_, _)) => {}
+                        _ => {
+                            return Err(CompileError::InvalidCommandLocation {
+                                line: line.assembly_line_num,
+                            });
+                        }
+                    }
+                }
+            }
+
             AssemblyPageIdent::Prog(page) => {
                 let mut code = code.new_page(page);
                 let mut useflag_saved_flag_state: Option<(FlagsState, usize)> = None; // (place where flags were set, assembly line of .USEFLAGS)
@@ -858,7 +887,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(b)?;
                                     code.push(a)?;
                                 }
-                                crate::Command::AddressValue(label) => {
+                                crate::Command::ValueLabelled(label) => {
                                     code.push(1)?;
                                     code.push_labelled_ram_address(label, line.clone())?;
                                 }
@@ -1197,7 +1226,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     }
                                     // Can't flush flags. Output instructions may or may not block.
                                 }
-                                crate::Command::Alloc(_) => {
+                                crate::Command::Alloc(_) | crate::Command::AllocLabelled(_) => {
                                     return Err(CompileError::InvalidCommandLocation {
                                         line: line.assembly_line_num,
                                     });
@@ -1220,6 +1249,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.flags_as_set.sources.iter().map(|x| x.1).collect(),
                                 );
                             }
+                            Meta::Constant(_, _) => {}
                         },
                     }
 
@@ -1272,18 +1302,32 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 }
                                 code.push_ram(v.unwrap())?;
                             }
-                            crate::Command::AddressValue(label) => {
+                            crate::Command::ValueLabelled(label) => {
                                 code.push_labelled_ram_address(label, line.clone())?;
                             }
-                            crate::Command::Alloc(v) => {
-                                if v.t.is_none() {
+                            crate::Command::Alloc(value) => {
+                                if value.t.is_none() {
                                     return Err(CompileError::Invalid16BitValue {
                                         line: line.assembly_line_num,
                                     });
                                 }
-                                let quantity = v.t.unwrap();
+                                let quantity = value.t.unwrap();
                                 for _ in 0..quantity {
                                     code.push_ram(0)?;
+                                }
+                            }
+                            crate::Command::AllocLabelled(label) => {
+                                if let Some(&quantity) =
+                                    page_layout.labelled_constants.get(&label.t)
+                                {
+                                    for _ in 0..quantity {
+                                        code.push_ram(0)?;
+                                    }
+                                } else {
+                                    return Err(CompileError::MissingConstLabel {
+                                        line: line.assembly_line_num,
+                                        label: label.clone(),
+                                    });
                                 }
                             }
                             _ => {
@@ -1302,6 +1346,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     line: line.assembly_line_num,
                                 });
                             }
+                            Meta::Constant(_, _) => {}
                         },
                     }
                 }

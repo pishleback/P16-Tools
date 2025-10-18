@@ -131,7 +131,7 @@ Line: Line = {
 
     "PASS" => Line::Command(Command::Pass),
     "VALUE" <value:WithPos<SixteenBitNum>> => Line::Command(Command::Value(value)),
-    "VALUE" <l:Label> => Line::Command(Command::AddressValue(l)),
+    "VALUE" <l:Label> => Line::Command(Command::ValueLabelled(l)),
     "JUMP" <l:Label> => Line::Command(Command::Jump(l)),
     "BRANCH" <c:WithPos<Condition>> <l:Label> => Line::Command(Command::Branch(c, l)),
     "PUSH" <r:WithPos<Register>> => Line::Command(Command::Push(r)),
@@ -180,12 +180,14 @@ Line: Line = {
     "OUTPUT" <addr:WithPos<DotSepNonEmpty<WithPos<OctDigit>>>> => Line::Command(Command::Output(addr)),
 
     "ALLOC" <quantity:WithPos<SixteenBitNum>> => Line::Command(Command::Alloc(quantity)),
+    "ALLOC" <l:Label> => Line::Command(Command::AllocLabelled(l)),
 
     "..ROM" <n:WithPos<NibbleNum>> => Line::Meta(Meta::RomPage(n)),
     "..RAM" => Line::Meta(Meta::RamPage),
     "..DATA" => Line::Meta(Meta::Data),
     ".LABEL" <l:Label> => Line::Meta(Meta::Label(l)),
     ".USEFLAGS" => Line::Meta(Meta::UseFlags),
+    ".CONST" <l:Label> <v:WithPos<SixteenBitNum>> => Line::Meta(Meta::Constant(l, v)),
 };
 
 pub Assembly: Assembly = {
