@@ -199,7 +199,6 @@ possible to fix with extra PASS instructions.",
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .stick_to_bottom(false)
-                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                 .show(ui, |ui| {
                     egui::CollapsingHeader::new("Assembly").show(ui, |ui| {
                         super::assembly::update(self, &compile_result, ctx, frame, ui);
