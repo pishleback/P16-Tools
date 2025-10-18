@@ -19,9 +19,7 @@ impl ProgramMemory {
         match ptr.page {
             ProgramPagePtr::Rom { page } => self.rom_page(page).get_nibble(ptr.counter),
             ProgramPagePtr::Ram { addr } => {
-                let nibble_block = self
-                    .ram()
-                    .read(addr.wrapping_add((ptr.counter / 4) as u16));
+                let nibble_block = self.ram().read(addr.wrapping_add((ptr.counter / 4) as u16));
                 let nibble_idx = 3 - ptr.counter % 4;
                 Nibble::new(((nibble_block >> (nibble_idx * 4)) & 15u16) as u8).unwrap()
             }
@@ -243,6 +241,10 @@ impl Simulator {
 
     pub fn get_pc(&self) -> ProgramPtr {
         self.program_counter
+    }
+
+    pub fn get_memory(&self) -> ProgramMemory {
+        self.memory.clone()
     }
 
     pub fn get_data_stack(&self) -> Vec<u16> {

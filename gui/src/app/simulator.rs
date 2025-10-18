@@ -1,4 +1,4 @@
-use assembly::{EndErrorState, Nibble, ProgramPtr, Simulator, full_compile};
+use assembly::{full_compile, EndErrorState, Nibble, ProgramMemory, ProgramPtr, Simulator};
 use egui::{RichText, Slider};
 use std::sync::{Arc, Mutex};
 use std::thread::{JoinHandle, spawn};
@@ -120,6 +120,10 @@ impl SimulatorState {
 
     pub fn get_pc(&self) -> ProgramPtr {
         self.simulator.lock().unwrap().get_pc()
+    }
+
+    pub fn get_memory(&self) -> ProgramMemory {
+        self.simulator.lock().unwrap().get_memory()
     }
 
     fn get_data_stack(&mut self) -> Vec<u16> {

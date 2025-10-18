@@ -24,6 +24,7 @@ pub use compile::PageIdent;
 pub use datatypes::Nibble;
 pub use datatypes::OctDigit;
 pub use memory::ProgramMemory;
+pub use memory::RamMem;
 pub use memory::RAM_SIZE;
 pub use memory::RAM_SIZE_NIBBLES;
 pub use simulator::EndErrorState;
