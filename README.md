@@ -182,7 +182,7 @@ Output
 
 ## Loading the program using a Schematic file
 
-To run the program on the actual P16 we need to create a worldedit schematic containing the program and paste it into the P16.
+To run the program on the actual P16 we need to create a worldedit schematic containing the program and paste it onto the P16.
 
 1. Run `cargo run --manifest-path assembly/Cargo.toml --release -- -a prog.txt -o prog.json; py schematic/main.py prog.json prog.schem` to generate the schematic. 
 2. There is a warning it cannot generate schematics for populating ROM page 0. Rom page 0 is the lever ROM on top of the P16, and this has to be set manually, as shown. <img width="1639" height="1894" alt="2025-07-27_22 13 31" src="https://github.com/user-attachments/assets/56482ae7-c0c9-4314-b940-090c34fb58f1" />
