@@ -1,43 +1,50 @@
+# inputs
+.CONST a 3
+.CONST b 2
+
 ..ROM 0
 CALL start
 RETURN
 
 ..ROM 1
-
+# setup
 .LABEL start
-.COMMENT "inputs"
-VALUE 3
-VALUE 2
-CALL ack
+VALUE a
+VALUE b
+CALL ack # ack(a, b)
 OUTPUT 1.0
 RETURN
 
+# s = ack(a, b)
+# PUSH a PUSH b CALL ack POP s
 .LABEL ack
-POP %0
-KSETF
+POP %0 # b
+KSETF # a
 .USEFLAGS
-POP %1
+POP %1 # a
 BRANCH !Z case2
-PUSH %0
-INC
+# a == 0
+PUSH %0 # b
+INC # b+1
 RETURN
 
+# a != 0
 .LABEL case2
-SETF %0
+SETF %0 # b
 .USEFLAGS
-BRANCH !Z case3
-PUSH %1
-DEC
+BRANCH !Z case3 # b != 0
+PUSH %1 # a
+DEC # a-1
 VALUE 1
-CALL ack
+CALL ack # ack(a-1, 1)
 RETURN
 
 .LABEL case3
-PUSH %1
-DEC
-PUSH %1
-PUSH %0
-DEC
-CALL ack
-CALL ack
+PUSH %1 #a
+DEC #a-1
+PUSH %1 #a
+PUSH %0 #b
+DEC # b-1
+CALL ack # ack(a, b-1)
+CALL ack # ack(a-1, ack(a, b-1))
 RETURN
