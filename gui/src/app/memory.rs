@@ -64,9 +64,9 @@ pub fn update(
                 {
                     let lines = compiled.ram_lines(ram_page_num);
                     if !lines.is_empty() {
-                        egui::CollapsingHeader::new(format!("RAM {}", ram_page_num)).show(
-                            ui,
-                            |ui| {
+                        egui::CollapsingHeader::new(format!("RAM {}", ram_page_num))
+                            .id_salt(format!("RAM {}", ram_page_num))
+                            .show(ui, |ui| {
                                 page(
                                     ui,
                                     nibbles,
@@ -85,13 +85,12 @@ pub fn update(
                                             }
                                         }),
                                 );
-                            },
-                        );
+                            });
                     }
                 } else {
-                    egui::CollapsingHeader::new(format!("RAM {} (Modified)", ram_page_num)).show(
-                        ui,
-                        |ui| {
+                    egui::CollapsingHeader::new(format!("RAM {} (Modified)", ram_page_num))
+                        .id_salt(format!("RAM {}", ram_page_num))
+                        .show(ui, |ui| {
                             page_raw(
                                 ui,
                                 live_nibbles.unwrap(),
@@ -108,8 +107,7 @@ pub fn update(
                                         }
                                     }),
                             );
-                        },
-                    );
+                        });
                 }
             }
 
