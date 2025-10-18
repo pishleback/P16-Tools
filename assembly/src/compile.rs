@@ -430,6 +430,17 @@ pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPag
 
     let mut ram_page_ident_counter = 0;
     for (line_num, &line) in assembly.lines_with_pos().iter().enumerate() {
+        match &line.t {
+            crate::assembly::Line::Meta(Meta::RomPage(_))
+            | crate::assembly::Line::Meta(Meta::RamPage) => {}
+            _ => {
+                if pages.is_empty() {
+                    // Probably forgot to specify the first page
+                    return Err(LayoutPagesError::MissingPageStart { line: line_num });
+                }
+            }
+        }
+
         if let crate::assembly::Line::Meta(Meta::Label(label)) = &line.t {
             if label_to_page.contains_key(&label.t) {
                 return Err(LayoutPagesError::DuplicateLabel {
@@ -448,18 +459,13 @@ pub fn layout_pages(assembly: &Assembly) -> Result<LayoutPagesSuccess, LayoutPag
                 pages.push((PageIdent::Ram(ram_page_ident_counter), vec![]));
                 ram_page_ident_counter += 1;
             }
-            _ => match pages.last_mut() {
-                Some((_, lines)) => {
-                    lines.push(LayoutPagesLine {
-                        line: line.clone(),
-                        assembly_line_num: line_num,
-                    });
-                }
-                None => {
-                    // Probably forgot to specify the first page
-                    return Err(LayoutPagesError::MissingPageStart { line: line_num });
-                }
-            },
+            _ => {
+                let (_, lines) = pages.last_mut().unwrap();
+                lines.push(LayoutPagesLine {
+                    line: line.clone(),
+                    assembly_line_num: line_num,
+                });
+            }
         }
     }
 
@@ -540,9 +546,9 @@ pub enum CompileError {
     BadUseflags {
         useflags_line: usize,
     },
-    BranchWithoutUseflags {
-        branch_line: usize,
-    },
+    // BranchWithoutUseflags {
+    //     branch_line: usize,
+    // },
     PageFull {
         page: PageIdent,
     },
@@ -577,11 +583,13 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             code.push(0)?;
                         }
                         crate::assembly::Command::Raw(nibbles) => {
+                            code.set_possible_flushed_flags(line_num);
                             for nibble in &nibbles.t {
                                 code.push(nibble.t.as_u8())?;
                             }
                         }
                         crate::Command::RawLabel(label) => {
+                            code.set_possible_flushed_flags(line_num);
                             let target_page = label_to_page.get(&label.t);
                             if target_page.is_none() {
                                 return Err(CompileError::MissingLabel {
@@ -659,12 +667,12 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 }
                                 None => {
                                     // all branches require a .USEFLAGS first
-                                    return Err(CompileError::BranchWithoutUseflags {
-                                        branch_line: line_num,
-                                    });
+                                    // return Err(CompileError::BranchWithoutUseflags {
+                                    //     branch_line: line_num,
+                                    // });
                                 }
                             }
-                            debug_assert!(branch_lines.contains_key(&line_num));
+                            // debug_assert!(branch_lines.contains_key(&line_num));
                             useflag_saved_flag_state = None;
                             code.push(3)?;
                             code.push(match condition.t {

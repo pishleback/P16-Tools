@@ -220,9 +220,9 @@ fn layout_job(
                                         Command::Branch(_, _) => {
                                             if selected_lines.len() == 1
                                                 && selected_lines.contains(&line_num)
+                                                && let Some(useflag_line_num) =
+                                                    compiled.useflag_from_branch(line_num)
                                             {
-                                                let useflag_line_num =
-                                                    compiled.useflag_from_branch(line_num).unwrap();
                                                 let useflag_line =
                                                     assembly.line_with_pos(useflag_line_num);
                                                 text_attrs.underline.insert(
@@ -341,12 +341,12 @@ fn layout_job(
                                 .underline
                                 .insert(useflags_line.start..useflags_line.end, red_underline);
                         }
-                        assembly::CompileError::BranchWithoutUseflags { branch_line } => {
-                            let branch_line = assembly.line_with_pos(*branch_line);
-                            text_attrs
-                                .underline
-                                .insert(branch_line.start..branch_line.end, red_underline);
-                        }
+                        // assembly::CompileError::BranchWithoutUseflags { branch_line } => {
+                        //     let branch_line = assembly.line_with_pos(*branch_line);
+                        //     text_attrs
+                        //         .underline
+                        //         .insert(branch_line.start..branch_line.end, red_underline);
+                        // }
                         assembly::CompileError::PageFull { page } => {
                             for (start, end) in page_layout.get_page_text_intervals(page) {
                                 text_attrs.underline.insert(start..end, red_underline);
