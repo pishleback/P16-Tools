@@ -169,8 +169,11 @@ Line: Line = {
     "INPUT" => Line::Command(Command::Input),
     "OUTPUT" <addr:WithPos<DotSepNonEmpty<WithPos<OctDigit>>>> => Line::Command(Command::Output(addr)),
 
+    "ALLOC" <quantity:WithPos<SixteenBitNum>> => Line::Command(Command::Alloc(quantity)),
+
     "..ROM" <n:WithPos<NibbleNum>> => Line::Meta(Meta::RomPage(n)),
     "..RAM" => Line::Meta(Meta::RamPage),
+    "..DATA" => Line::Meta(Meta::Data),
     ".LABEL" <l:Label> => Line::Meta(Meta::Label(l)),
     ".USEFLAGS" => Line::Meta(Meta::UseFlags),
 

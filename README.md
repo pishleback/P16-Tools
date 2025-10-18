@@ -22,13 +22,13 @@ There are 16 pages of program ROM in all. The levers on top are page 0. The othe
 
 # Instruction Set and Assembly Language
 
+Example assembly files can be found in the `examples` folder.
+
 ## Operations
 
 There are 16 general purpose registers and a data stack.
 
 The table below describes the assembly commands and what they do. The last column describes how the instruction is translated into machine code, represented as a string of hexadecimal digits 0-9|A-F with lower case letters representing a hexadecimal digit with a variable value.
-
-Example assembly files can be found in the `examples` folder.
 
 | Assembly                     | Description                                                                                                                                                                                                                                                                                                         |  Sets ALU Flags?   | Machine Code                                                                                                                                                                                                                                                                                   |
 | :--------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -83,6 +83,14 @@ Example assembly files can be found in the `examples` folder.
 | `RAW <nibbles>`              | Insert raw hexadecimal instructions.                                                                                                                                                                                                                                                                                |  :grey_question:   | `<nibbles>`                                                                                                                                                                                                                                                                                    |
 | `RAW <label>`                | Insert the location of a `.LABEL` within it's page.                                                                                                                                                                                                                                                                 |  :grey_question:   | `aa` where `aa` is the address of `label` in whatever page it is defined.                                                                                                                                                                                                                      |
 
+There are also some commands for setting up RAM.
+
+| Assembly                     | Description                                      |
+| :--------------------------- | :------------------------------------------------|
+| `..DATA`                     | All following instructions take effect in RAM.   |
+| `.LABEL <label>`             | Label a location in RAM.                         |
+| `VALUE <value>`              | Put `value` into RAM.                            |
+| `ALLOC <quantity>`           | Reserve the next `quantity` addresses in RAM     |
 
 There are four ALU flags `Z`, `N`, `C`, and `V` and an additional flag `I`. The conditions under which each of these flags are set are:
 

@@ -180,6 +180,11 @@ fn layout_job(
                         assembly::Command::RawLabel(label) => {
                             add_label(&mut text_attrs, label);
                         }
+                        assembly::Command::Alloc(quantity) => {
+                            text_attrs
+                                .colour
+                                .insert(quantity.start..quantity.end, visuals.text_color());
+                        }
                         _ => {}
                     },
                     assembly::Line::Meta(meta) => match meta {
@@ -194,6 +199,9 @@ fn layout_job(
                                 .insert(page.start..page.end, visuals.strong_text_color());
                         }
                         assembly::Meta::RamPage => {
+                            text_attrs.italics.insert(*start..*end, true);
+                        }
+                        assembly::Meta::Data => {
                             text_attrs.italics.insert(*start..*end, true);
                         }
                         assembly::Meta::UseFlags => {
@@ -290,7 +298,6 @@ fn layout_job(
                                 }
                             }
                         }
-
                         assembly::CompileError::MissingLabel { line, .. } => {
                             let line = assembly.line_with_pos(*line);
                             match &line.t {
@@ -307,7 +314,6 @@ fn layout_job(
                                 ),
                             }
                         }
-
                         assembly::CompileError::JumpOrBranchToOtherPage { line } => {
                             let line = assembly.line_with_pos(*line);
                             match &line.t {
@@ -341,16 +347,16 @@ fn layout_job(
                                 .underline
                                 .insert(useflags_line.start..useflags_line.end, red_underline);
                         }
-                        // assembly::CompileError::BranchWithoutUseflags { branch_line } => {
-                        //     let branch_line = assembly.line_with_pos(*branch_line);
-                        //     text_attrs
-                        //         .underline
-                        //         .insert(branch_line.start..branch_line.end, red_underline);
-                        // }
                         assembly::CompileError::PageFull { page } => {
                             for (start, end) in page_layout.get_page_text_intervals(page) {
                                 text_attrs.underline.insert(start..end, red_underline);
                             }
+                        }
+                        assembly::CompileError::InvalidCommandLocation { line } => {
+                            let line = assembly.line_with_pos(*line);
+                            text_attrs
+                                .underline
+                                .insert(line.start..line.end, red_underline);
                         }
                     },
                 },

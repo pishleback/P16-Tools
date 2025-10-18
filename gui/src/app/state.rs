@@ -91,15 +91,6 @@ possible to fix with extra PASS instructions.",
                                     assembly::CompileError::BadUseflags { .. } => {
                                         ui.label(RichText::new("BadUseflags").color(Color32::RED));
                                     }
-//                                     assembly::CompileError::BranchWithoutUseflags { .. } => {
-//                                         ui.label(
-//                                             RichText::new(
-//                                                 "\
-// BRANCH instructions require a .USEFLAGS to ensure the correct flags are used.",
-//                                             )
-//                                             .color(Color32::RED),
-//                                         );
-//                                     }
                                     assembly::CompileError::PageFull { page } => match page {
                                         assembly::PageIdent::Rom(nibble) => {
                                             ui.label(
@@ -116,6 +107,14 @@ possible to fix with extra PASS instructions.",
                                             );
                                         }
                                     },
+                                    assembly::CompileError::InvalidCommandLocation { .. } => {
+                                        ui.label(
+                                            RichText::new(
+                                                "Line appears in an invalid location.".to_string(),
+                                            )
+                                            .color(Color32::RED),
+                                        );
+                                    }
                                 },
                             },
                             Err(e) => match e {

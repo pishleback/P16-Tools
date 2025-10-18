@@ -99,12 +99,15 @@ pub enum Command {
     RawRamCall,
     Input,
     Output(WithPos<Vec<WithPos<OctDigit>>>),
+
+    Alloc(WithPos<Option<u16>>), // None if out of range
 }
 
 #[derive(Debug, Clone)]
 pub enum Meta {
     RomPage(WithPos<Nibble>),
     RamPage,
+    Data,
     Label(WithPos<Label>),
     UseFlags,
     Comment(WithPos<String>),
