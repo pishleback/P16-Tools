@@ -278,7 +278,7 @@ fn layout_job(
 
             for i in *page_start..*page_end {
                 job.append(
-                    &page[i..(i+1)],
+                    &page[i..(i + 1)],
                     0.0,
                     TextFormat {
                         color: if selected_assembly.contains(assembly_line_num) {

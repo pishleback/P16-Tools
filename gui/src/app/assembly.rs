@@ -118,7 +118,6 @@ fn layout_job(
                 // syntax highlighting
                 match line {
                     assembly::Line::Command(command) => match command {
-                        
                         assembly::Command::Value(v) => {
                             text_attrs.colour.insert(
                                 v.start..v.end,
