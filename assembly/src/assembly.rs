@@ -46,6 +46,7 @@ pub enum Condition {
 pub enum Command {
     Pass,
     Raw(WithPos<Vec<WithPos<Nibble>>>),
+    RawLabel(WithPos<Label>),
     Value(WithPos<Option<u16>>), // None if out of range
     Jump(WithPos<Label>),
     Branch(WithPos<Condition>, WithPos<Label>),

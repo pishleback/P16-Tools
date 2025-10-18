@@ -275,22 +275,23 @@ fn layout_job(
             }
             i += 1;
             no_space = false;
-            job.append(
-                &page[*page_start..*page_end],
-                0.0,
-                TextFormat {
-                    color: if selected_assembly.contains(assembly_line_num) {
-                        selected_colour
-                    } else if pc.is_some_and(|pc| {
-                        (*page_start <= pc as usize) && ((pc as usize) < *page_end)
-                    }) {
-                        visuals.strong_text_color()
-                    } else {
-                        visuals.text_color()
+
+            for i in *page_start..*page_end {
+                job.append(
+                    &page[i..(i+1)],
+                    0.0,
+                    TextFormat {
+                        color: if selected_assembly.contains(assembly_line_num) {
+                            selected_colour
+                        } else if pc.is_some_and(|pc| pc as usize == i) {
+                            visuals.strong_text_color()
+                        } else {
+                            visuals.text_color()
+                        },
+                        ..Default::default()
                     },
-                    ..Default::default()
-                },
-            );
+                );
+            }
         }
     }
     job

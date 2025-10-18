@@ -118,6 +118,7 @@ Condition: Condition = {
 
 Line: Line = {
     "RAW" <n:WithPos<Concat<WithPos<NibbleNum>>>> => Line::Command(Command::Raw(n)),
+    "RAW" <l:Label> => Line::Command(Command::RawLabel(l)),
 
     "PASS" => Line::Command(Command::Pass),
     "VALUE" <value:WithPos<SixteenBitNum>> => Line::Command(Command::Value(value)),

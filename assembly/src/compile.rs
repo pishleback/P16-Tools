@@ -349,7 +349,7 @@ impl<'a> MemoryPageManager<'a> {
             .insert(label.clone(), (self.page, self.ptr.unwrap()));
         Ok(())
     }
-    fn label_target(&mut self, label: Label) -> Result<(), CompileError> {
+    fn push_labelled_page_location(&mut self, label: Label) -> Result<(), CompileError> {
         self.check_is_full()?;
         self.memory_manager
             .label_targets
@@ -359,11 +359,11 @@ impl<'a> MemoryPageManager<'a> {
         self.inc();
         Ok(())
     }
-    fn ram_addr(&mut self, ident: usize) -> Result<(), CompileError> {
+    fn push_page_ram_addr(&mut self, ram_page_ident: usize) -> Result<(), CompileError> {
         self.check_is_full()?;
         self.memory_manager
             .ram_addr_targets
-            .push((ident, self.page, self.ptr.unwrap()));
+            .push((ram_page_ident, self.page, self.ptr.unwrap()));
         self.inc();
         self.inc();
         self.inc();
@@ -581,6 +581,16 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 code.push(nibble.t.as_u8())?;
                             }
                         }
+                        crate::Command::RawLabel(label) => {
+                            let target_page = label_to_page.get(&label.t);
+                            if target_page.is_none() {
+                                return Err(CompileError::MissingLabel {
+                                    line: line_num,
+                                    label,
+                                });
+                            }
+                            code.push_labelled_page_location(label.t)?;
+                        }
                         crate::assembly::Command::Value(WithPos { t: v, .. }) => {
                             if v.is_none() {
                                 return Err(CompileError::Invalid16BitValue { line: line_num });
@@ -611,7 +621,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 });
                             }
                             code.push(2)?;
-                            code.label_target(label.t)?;
+                            code.push_labelled_page_location(label.t)?;
                         }
                         crate::assembly::Command::Branch(condition, label) => {
                             let target_page = label_to_page.get(&label.t);
@@ -675,7 +685,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 crate::assembly::Condition::Greater => 14,
                                 crate::assembly::Condition::LessEqual => 15,
                             })?;
-                            code.label_target(label.t)?;
+                            code.push_labelled_page_location(label.t)?;
                             code.flush_flags();
                         }
                         crate::assembly::Command::Push(nibble) => {
@@ -699,19 +709,19 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             let target_page = *target_page.unwrap();
                             if page == target_page {
                                 code.push(6)?;
-                                code.label_target(label.t)?;
+                                code.push_labelled_page_location(label.t)?;
                             } else {
                                 match target_page {
                                     PageIdent::Rom(nibble) => {
                                         code.push(12)?;
                                         code.push(nibble.as_u8())?;
-                                        code.label_target(label.t)?;
+                                        code.push_labelled_page_location(label.t)?;
                                     }
                                     PageIdent::Ram(ident) => {
                                         code.push(1)?;
-                                        code.ram_addr(ident)?;
+                                        code.push_page_ram_addr(ident)?;
                                         code.push(13)?;
-                                        code.label_target(label.t)?;
+                                        code.push_labelled_page_location(label.t)?;
                                     }
                                 }
                             }

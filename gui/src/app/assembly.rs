@@ -118,12 +118,7 @@ fn layout_job(
                 // syntax highlighting
                 match line {
                     assembly::Line::Command(command) => match command {
-                        assembly::Command::Raw(n) => {
-                            text_attrs.colour.insert(
-                                n.start..n.end,
-                                visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
-                            );
-                        }
+                        
                         assembly::Command::Value(v) => {
                             text_attrs.colour.insert(
                                 v.start..v.end,
@@ -176,6 +171,15 @@ fn layout_job(
                                 path.start..path.end,
                                 visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
                             );
+                        }
+                        assembly::Command::Raw(n) => {
+                            text_attrs.colour.insert(
+                                n.start..n.end,
+                                visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
+                            );
+                        }
+                        assembly::Command::RawLabel(label) => {
+                            add_label(&mut text_attrs, label);
                         }
                         _ => {}
                     },
@@ -293,7 +297,8 @@ fn layout_job(
                             match &line.t {
                                 assembly::Line::Command(Command::Jump(label))
                                 | assembly::Line::Command(Command::Branch(_, label))
-                                | assembly::Line::Command(Command::Call(label)) => {
+                                | assembly::Line::Command(Command::Call(label))
+                                | assembly::Line::Command(Command::RawLabel(label)) => {
                                     text_attrs
                                         .underline
                                         .insert(label.start..label.end, red_underline);
