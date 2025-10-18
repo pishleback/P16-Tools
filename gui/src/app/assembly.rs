@@ -288,9 +288,11 @@ fn layout_job(
                         assembly::CompileError::Invalid16BitValue { line } => {
                             let line = assembly.line_with_pos(*line);
                             match &line.t {
-                                assembly::Line::Command(Command::Value(v)) => {
+                                assembly::Line::Command(Command::Value(v))
+                                | assembly::Line::Command(Command::Alloc(v)) => {
                                     text_attrs.underline.insert(v.start..v.end, red_underline);
                                 }
+
                                 _ => {
                                     text_attrs
                                         .underline

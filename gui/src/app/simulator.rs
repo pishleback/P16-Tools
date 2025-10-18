@@ -1,4 +1,4 @@
-use assembly::{full_compile, EndErrorState, Nibble, ProgramMemory, ProgramPtr, Simulator};
+use assembly::{EndErrorState, Nibble, ProgramMemory, ProgramPtr, Simulator, full_compile};
 use egui::{RichText, Slider};
 use std::sync::{Arc, Mutex};
 use std::thread::{JoinHandle, spawn};

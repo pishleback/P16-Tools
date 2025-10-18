@@ -1051,7 +1051,41 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                     }
                 }
             }
-            AssemblyPageIdent::Data(_) => {}
+            AssemblyPageIdent::Data(_) => {
+                for LayoutPagesLine {
+                    line,
+                    assembly_line_num: line_num,
+                } in lines
+                {
+                    match line.t {
+                        Line::Command(command) => match command {
+                            crate::Command::Value(_) => {}
+                            crate::Command::Alloc(v) => {
+                                if v.t.is_none() {
+                                        return Err(CompileError::Invalid16BitValue {
+                                            line: line_num,
+                                        });
+                                    }
+                            }
+                            _ => {
+                                return Err(CompileError::InvalidCommandLocation {
+                                    line: line_num,
+                                });
+                            }
+                        },
+                        Line::Meta(meta) => match meta {
+                            Meta::RomPage(_) | Meta::RamPage | Meta::Data => unreachable!(),
+                            Meta::Label(_) => {}
+                            Meta::UseFlags => {
+                                return Err(CompileError::InvalidCommandLocation {
+                                    line: line_num,
+                                });
+                            }
+                            Meta::Comment(_) => {}
+                        },
+                    }
+                }
+            }
         }
     }
 
