@@ -1,3 +1,4 @@
+use crate::app::simulator::SimulatorStateTrait;
 use crate::app::state::State;
 use assembly::{CompiledLine, FullCompileResult, Nibble};
 use assembly::{ProgramPagePtr, RamMem};
