@@ -256,7 +256,7 @@ fn ram(ui: &mut Ui, ram: RamMem) {
             // theoretical answer
             let max_chars = (wrap_width / char_width).floor() as usize;
             // // but it seems to be off a bit
-            // let max_chars = max_chars.saturating_sub(3);
+            let max_chars = (975 * max_chars) / 1000;
             std::cmp::max(max_chars, 1)
         };
 
