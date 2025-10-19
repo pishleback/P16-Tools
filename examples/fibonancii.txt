@@ -1,11 +1,6 @@
+# Computes the fibonancii numbers in register 0 until there is an overflow.
+
 ..ROM 0
-CALL start
-RETURN
-
-
-..ROM 1
-
-.LABEL start
 VALUE 1
 DUP
 POP %0

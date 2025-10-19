@@ -27,6 +27,29 @@ pub fn update(
         .stick_to_bottom(false)
         // .max_height(600.0)
         .show(ui, |ui| {
+            static FILES: &[(&str, &str)] = &[
+                (
+                    "Fibonancii",
+                    include_str!("../../../examples/fibonancii.txt"),
+                ),
+                ("Multiply", include_str!("../../../examples/multiply.txt")),
+                ("Ackermann", include_str!("../../../examples/ackermann.txt")),
+            ];
+
+            let mut selected_file = None;
+            egui::ComboBox::from_id_salt("file_combo")
+                .selected_text("Example Programs")
+                .show_ui(ui, |ui| {
+                    for (i, (name, _content)) in FILES.iter().enumerate() {
+                        ui.selectable_value(&mut selected_file, Some(i), *name);
+                    }
+                });
+            if let Some(i) = selected_file {
+                state.source = FILES[i].1.to_string();
+            }
+
+            ui.separator();
+
             let output = egui::TextEdit::multiline(&mut state.source)
                 .id("assembly-text-area".into())
                 .font(egui::TextStyle::Monospace)

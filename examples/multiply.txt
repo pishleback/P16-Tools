@@ -1,11 +1,12 @@
-..ROM 0
-CALL start
-RETURN
+# Multiply a and b
+# Put the result into registers 0 and 1
 
-..ROM 1
-.LABEL start
-INPUT
-INPUT
+.CONST a 63
+.CONST b 4096
+
+..ROM 0
+VALUE a
+VALUE b
 CALL mul
 RETURN
 
