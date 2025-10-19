@@ -602,7 +602,10 @@ fn evaluate_constant_expression(
             if let Some(&value) = variables.get(&label.t) {
                 Ok(value)
             } else {
-                Err(CompileError::MissingConstLabel { line, label: label.clone() })
+                Err(CompileError::MissingConstLabel {
+                    line,
+                    label: label.clone(),
+                })
             }
         }
     }
