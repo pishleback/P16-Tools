@@ -97,7 +97,7 @@ There are also some commands for populating RAM with data.
 | `ALLOC <constexpr>`          | Evaluate `constexpr` at compile-time and reserve the next `constexpr` many addresses in RAM. `constexpr` may depend only on constants defined by `.CONSTANT` instructions.                                                                    |
 
 Syntax of the common arguments not explained in the tables above:
- - `<constexpr>` arguments are expressions constructed using integer literals, labels, and the binary operations of addition `+`, subtraction `-`, and multiplication `*`. `*` is evaluted before `+` and `-`. Operations wrap to produce a 16-bit value.
+ - `<constexpr>` arguments are expressions constructed using integer literals, `<label>`s, and the binary operations of addition `+`, subtraction `-`, and multiplication `*`. `*` is evaluted before `+` and `-`. Operations wrap to produce a 16-bit value.
  - `<label>` arguments are lower-case strings of letters, digits, and underscores. They cannot being with a digit.
  - `<register>` arguments are one of `%0`, `%1`, ..., `%F`.
 
