@@ -1,4 +1,5 @@
-# inputs
+# Compute the Ackermann function ack(a, b)
+# The Ackermann function grows faster than any any primitive recursive function. It also takes a _very_ long time to run unless the inputs are tiny.
 .CONST a 3
 .CONST b 2
 
