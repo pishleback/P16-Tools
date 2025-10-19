@@ -192,93 +192,95 @@ pub fn update(
     _frame: &mut eframe::Frame,
     ui: &mut egui::Ui,
 ) {
-    ui.horizontal(|ui| {
-        if let Some(simulator) = state.simulator.as_mut() {
-            match simulator.end_state() {
-                Some(end) => match end {
-                    SimulatorEndState::Halt => {
-                        ui.label("Finished");
-                    }
-                    SimulatorEndState::Killed => {
-                        ui.label("Killed");
-                    }
-                    SimulatorEndState::Error(e) => match e {
-                        EndErrorState::DataStackOverflow => {
-                            ui.label("Data Stack Overflow");
+    if state.is_compiled() {
+        ui.horizontal(|ui| {
+            if let Some(simulator) = state.simulator.as_mut() {
+                match simulator.end_state() {
+                    Some(end) => match end {
+                        SimulatorEndState::Halt => {
+                            ui.label("Finished");
                         }
+                        SimulatorEndState::Killed => {
+                            ui.label("Killed");
+                        }
+                        SimulatorEndState::Error(e) => match e {
+                            EndErrorState::DataStackOverflow => {
+                                ui.label("Data Stack Overflow");
+                            }
+                        },
                     },
-                },
-                None => {
-                    if *simulator.instructions_per_second.lock().unwrap() == 0.0 {
-                        ui.label("Paused");
-                        if ui.button("Step").clicked() {
-                            simulator.one_step();
+                    None => {
+                        if *simulator.instructions_per_second.lock().unwrap() == 0.0 {
+                            ui.label("Paused");
+                            if ui.button("Step").clicked() {
+                                simulator.one_step();
+                            }
+                        } else {
+                            ui.label("Running");
+                            ctx.request_repaint();
                         }
-                    } else {
-                        ui.label("Running");
-                        ctx.request_repaint();
                     }
                 }
             }
-        }
 
-        if ui.button("Reset").clicked() {
-            state.reload_simulator();
-        }
-    });
+            if ui.button("Reset").clicked() {
+                state.reload_simulator();
+            }
+        });
 
-    ui.horizontal(|ui| {
+        ui.horizontal(|ui| {
+            if let Some(simulator) = state.simulator.as_mut() {
+                ui.label("Instructions Per Second");
+
+                ui.add(
+                    Slider::new(&mut state.sim_speed_slider, 0.0..=1.0).custom_formatter(|t, _| {
+                        let ips = State::instructions_per_second_from_sim_speed_slider(t);
+                        if ips <= 0.0 {
+                            "0".to_string()
+                        } else if ips < 10.0 {
+                            format!("{:.1}", ips)
+                        } else {
+                            format!("{:.0}", ips)
+                        }
+                    }),
+                );
+
+                simulator.set_instructions_per_second(
+                    State::instructions_per_second_from_sim_speed_slider(state.sim_speed_slider),
+                );
+            }
+        });
+
         if let Some(simulator) = state.simulator.as_mut() {
-            ui.label("Instructions Per Second");
-
-            ui.add(
-                Slider::new(&mut state.sim_speed_slider, 0.0..=1.0).custom_formatter(|t, _| {
-                    let ips = State::instructions_per_second_from_sim_speed_slider(t);
-                    if ips <= 0.0 {
-                        "0".to_string()
-                    } else if ips < 10.0 {
-                        format!("{:.1}", ips)
-                    } else {
-                        format!("{:.0}", ips)
+            egui::CollapsingHeader::new("Program Counter").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let pc = simulator.get_pc();
+                    match pc.page {
+                        assembly::ProgramPagePtr::Rom { page } => {
+                            ui.label(format!("Page = ROM {}", page.hex_str()));
+                        }
+                        assembly::ProgramPagePtr::Ram { addr } => {
+                            ui.label(format!("Page = RAM {}", addr));
+                        }
                     }
-                }),
-            );
+                    ui.label(format!("Counter = {}", pc.counter));
+                })
+            });
 
-            simulator.set_instructions_per_second(
-                State::instructions_per_second_from_sim_speed_slider(state.sim_speed_slider),
-            );
-        }
-    });
-
-    if let Some(simulator) = state.simulator.as_mut() {
-        egui::CollapsingHeader::new("Program Counter").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let pc = simulator.get_pc();
-                match pc.page {
-                    assembly::ProgramPagePtr::Rom { page } => {
-                        ui.label(format!("Page = ROM {}", page.hex_str()));
-                    }
-                    assembly::ProgramPagePtr::Ram { addr } => {
-                        ui.label(format!("Page = RAM {}", addr));
-                    }
+            egui::CollapsingHeader::new("Registers").show(ui, |ui| {
+                for reg in 0..16 {
+                    let reg = Nibble::new(reg).unwrap();
+                    show_16bit_value(ui, format!("%{}", reg.hex_str()), simulator.get_reg(reg));
                 }
-                ui.label(format!("Counter = {}", pc.counter));
-            })
-        });
+            });
 
-        egui::CollapsingHeader::new("Registers").show(ui, |ui| {
-            for reg in 0..16 {
-                let reg = Nibble::new(reg).unwrap();
-                show_16bit_value(ui, format!("%{}", reg.hex_str()), simulator.get_reg(reg));
-            }
-        });
-
-        egui::CollapsingHeader::new("Data Stack").show(ui, |ui| {
-            let data_stack = simulator.get_data_stack();
-            for n in data_stack {
-                show_16bit_value(ui, String::new(), n);
-            }
-        });
+            egui::CollapsingHeader::new("Data Stack").show(ui, |ui| {
+                let data_stack = simulator.get_data_stack();
+                for n in data_stack {
+                    show_16bit_value(ui, String::new(), n);
+                }
+            });
+        }
     }
 }
 

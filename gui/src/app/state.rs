@@ -41,158 +41,18 @@ impl State {
         #[cfg(not(target_arch = "wasm32"))]
         self.simulator.update_source(&source);
 
-        // Left panel with buttons
-        egui::SidePanel::left("left_panel")
-            .resizable(true)
-            .default_width(150.0)
-            .show(ctx, |ui| {
-                if compiled_memory.is_none() {
-                    ui.heading("Compile Error");
+        egui::Window::new("Assembly").show(ctx, |ui| {
+            super::assembly::update(self, &compile_result, ctx, frame, ui);
+        });
 
-                    match &compile_result {
-                        Ok((result, _)) => match result {
-                            Ok((result, _)) => match result {
-                                Ok(_) => {}
-                                Err(e) => match e {
-                                    assembly::CompileError::Invalid16BitValue { .. } => {
-                                        ui.label(
-                                            RichText::new("Invalid 16-bit immediate value.")
-                                                .color(Color32::RED),
-                                        );
-                                    }
-                                    assembly::CompileError::MissingLabel { label, .. } => {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "Page location label `{}` not defined.",
-                                                label.t.to_string()
-                                            ))
-                                            .color(Color32::RED),
-                                        );
-                                    }
-                                    assembly::CompileError::MissingConstLabel { label, .. } => {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "Const label `{}` not defined.",
-                                                label.t.to_string()
-                                            ))
-                                            .color(Color32::RED),
-                                        );
-                                    }
-                                    assembly::CompileError::DuplicateConstLabel {
-                                        label, ..
-                                    } => {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "Duplicate Const label definition: `{}`",
-                                                label.t.to_string()
-                                            ))
-                                            .color(Color32::RED),
-                                        );
-                                    }
-                                    assembly::CompileError::JumpOrBranchToOtherPage { .. } => {
-                                        ui.label(
-                                            RichText::new(
-                                                "\
-JUMP or BRANCH to a different page is not possible. Use CALL to chage pages.",
-                                            )
-                                            .color(Color32::RED),
-                                        );
-                                    }
-                                    assembly::CompileError::BadUseflagsWithBranch { .. } => {
-                                        ui.label(
-                                            RichText::new(
-                                                "\
-BRANCH does not use flags at .USEFLAGS and it is not \
-possible to fix with extra PASS instructions.",
-                                            )
-                                            .color(Color32::RED),
-                                        );
-                                    }
-                                    assembly::CompileError::BadUseflags { .. } => {
-                                        ui.label(RichText::new("BadUseflags").color(Color32::RED));
-                                    }
-                                    assembly::CompileError::RomPageFull { page } => {
-                                        ui.label(
-                                            RichText::new(format!(
-                                                "ROM page {} is full.",
-                                                page.hex_str()
-                                            ))
-                                            .color(Color32::RED),
-                                        );
-                                    }
-                                    assembly::CompileError::RamFull => {
-                                        ui.label(RichText::new("RAM is full.").color(Color32::RED));
-                                    }
+        egui::Window::new("Memory").show(ctx, |ui| {
+            super::memory::update(self, &compile_result, ctx, frame, ui);
+        });
 
-                                    assembly::CompileError::InvalidCommandLocation { .. } => {
-                                        ui.label(
-                                            RichText::new(
-                                                "Line appears in an invalid location.".to_string(),
-                                            )
-                                            .color(Color32::RED),
-                                        );
-                                    }
-                                },
-                            },
-                            Err(e) => match e {
-                                assembly::LayoutPagesError::DuplicateLabel { label, .. } => {
-                                    ui.label(
-                                        RichText::new(format!(
-                                            "Duplicate label: `{}`",
-                                            label.t.to_string()
-                                        ))
-                                        .color(Color32::RED),
-                                    );
-                                }
-                                assembly::LayoutPagesError::Invalid16BitConstValue { line } => {
-                                    ui.label(
-                                        RichText::new("Invalid 16-bit constant value.")
-                                            .color(Color32::RED),
-                                    );
-                                }
-                                assembly::LayoutPagesError::DuplicateConstLabel { line, label } => {
-                                    ui.label(
-                                        RichText::new(format!(
-                                            "Duplicate label: `{}`",
-                                            label.t.to_string()
-                                        ))
-                                        .color(Color32::RED),
-                                    );
-                                }
-                            },
-                        },
-                        Err(e) => match e {
-                            lalrpop_util::ParseError::InvalidToken { .. } => {
-                                ui.label(RichText::new("Invalid Token").color(Color32::RED));
-                            }
-                            lalrpop_util::ParseError::UnrecognizedEof { expected, .. } => {
-                                ui.label(
-                                    RichText::new(format!(
-                                        "Unrecognized EOF. Expected one of: {}",
-                                        expected.join(", ")
-                                    ))
-                                    .color(Color32::RED),
-                                );
-                            }
-                            lalrpop_util::ParseError::UnrecognizedToken { expected, .. } => {
-                                ui.label(
-                                    RichText::new(format!(
-                                        "Unrecognized Token. Expected one of: {}",
-                                        expected.join(", ")
-                                    ))
-                                    .color(Color32::RED),
-                                );
-                            }
-                            lalrpop_util::ParseError::ExtraToken { .. } => {
-                                ui.label(RichText::new("Extra Token").color(Color32::RED));
-                            }
-                            lalrpop_util::ParseError::User { .. } => {
-                                ui.label(RichText::new("Parse Error").color(Color32::RED));
-                            }
-                        },
-                    }
-                }
-            });
+        #[cfg(not(target_arch = "wasm32"))]
+        egui::Window::new("Simulator").show(ctx, |ui| {
+            simulator::update(&mut self.simulator, ctx, frame, ui);
+        });
 
         // Central text area
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -200,17 +60,174 @@ possible to fix with extra PASS instructions.",
                 .auto_shrink([false; 2])
                 .stick_to_bottom(false)
                 .show(ui, |ui| {
-                    egui::CollapsingHeader::new("Assembly").show(ui, |ui| {
-                        super::assembly::update(self, &compile_result, ctx, frame, ui);
-                    });
+                    if compiled_memory.is_none() {
+                        ui.heading("Compile Error");
 
-                    super::memory::update(self, &compile_result, ctx, frame, ui);
+                        match &compile_result {
+                            Ok((result, _)) => match result {
+                                Ok((result, _)) => match result {
+                                    Ok(_) => {}
+                                    Err(e) => match e {
+                                        assembly::CompileError::Invalid16BitValue { .. } => {
+                                            ui.label(
+                                                RichText::new("Invalid 16-bit immediate value.")
+                                                    .color(Color32::RED),
+                                            );
+                                        }
+                                        assembly::CompileError::MissingLabel { label, .. } => {
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "Page location label `{}` not defined.",
+                                                    label.t.to_string()
+                                                ))
+                                                .color(Color32::RED),
+                                            );
+                                        }
+                                        assembly::CompileError::MissingConstLabel {
+                                            label, ..
+                                        } => {
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "Const label `{}` not defined.",
+                                                    label.t.to_string()
+                                                ))
+                                                .color(Color32::RED),
+                                            );
+                                        }
+                                        assembly::CompileError::DuplicateConstLabel {
+                                            label,
+                                            ..
+                                        } => {
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "Duplicate Const label definition: `{}`",
+                                                    label.t.to_string()
+                                                ))
+                                                .color(Color32::RED),
+                                            );
+                                        }
+                                        assembly::CompileError::JumpOrBranchToOtherPage {
+                                            ..
+                                        } => {
+                                            ui.label(
+                                                RichText::new(
+                                                    "\
+JUMP or BRANCH to a different page is not possible. Use CALL to chage pages.",
+                                                )
+                                                .color(Color32::RED),
+                                            );
+                                        }
+                                        assembly::CompileError::BadUseflagsWithBranch {
+                                            ..
+                                        } => {
+                                            ui.label(
+                                                RichText::new(
+                                                    "\
+BRANCH does not use flags at .USEFLAGS and it is not \
+possible to fix with extra PASS instructions.",
+                                                )
+                                                .color(Color32::RED),
+                                            );
+                                        }
+                                        assembly::CompileError::BadUseflags { .. } => {
+                                            ui.label(
+                                                RichText::new("BadUseflags").color(Color32::RED),
+                                            );
+                                        }
+                                        assembly::CompileError::RomPageFull { page } => {
+                                            ui.label(
+                                                RichText::new(format!(
+                                                    "ROM page {} is full.",
+                                                    page.hex_str()
+                                                ))
+                                                .color(Color32::RED),
+                                            );
+                                        }
+                                        assembly::CompileError::RamFull => {
+                                            ui.label(
+                                                RichText::new("RAM is full.").color(Color32::RED),
+                                            );
+                                        }
 
-                    #[cfg(not(target_arch = "wasm32"))]
-                    if self.simulator.is_compiled() {
-                        egui::CollapsingHeader::new("Simulator").show(ui, |ui| {
-                            simulator::update(&mut self.simulator, ctx, frame, ui);
-                        });
+                                        assembly::CompileError::InvalidCommandLocation {
+                                            ..
+                                        } => {
+                                            ui.label(
+                                                RichText::new(
+                                                    "Line appears in an invalid location."
+                                                        .to_string(),
+                                                )
+                                                .color(Color32::RED),
+                                            );
+                                        }
+                                    },
+                                },
+                                Err(e) => match e {
+                                    assembly::LayoutPagesError::DuplicateLabel {
+                                        label, ..
+                                    } => {
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "Duplicate label: `{}`",
+                                                label.t.to_string()
+                                            ))
+                                            .color(Color32::RED),
+                                        );
+                                    }
+                                    assembly::LayoutPagesError::Invalid16BitConstValue {
+                                        ..
+                                    } => {
+                                        ui.label(
+                                            RichText::new("Invalid 16-bit constant value.")
+                                                .color(Color32::RED),
+                                        );
+                                    }
+                                    assembly::LayoutPagesError::DuplicateConstLabel {
+                                        label,
+                                        ..
+                                    } => {
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "Duplicate label: `{}`",
+                                                label.t.to_string()
+                                            ))
+                                            .color(Color32::RED),
+                                        );
+                                    }
+                                },
+                            },
+                            Err(e) => match e {
+                                lalrpop_util::ParseError::InvalidToken { .. } => {
+                                    ui.label(RichText::new("Invalid Token").color(Color32::RED));
+                                }
+                                lalrpop_util::ParseError::UnrecognizedEof { expected, .. } => {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "Unrecognized EOF. Expected one of: {}",
+                                            expected.join(", ")
+                                        ))
+                                        .color(Color32::RED),
+                                    );
+                                }
+                                lalrpop_util::ParseError::UnrecognizedToken {
+                                    expected, ..
+                                } => {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "Unrecognized Token. Expected one of: {}",
+                                            expected.join(", ")
+                                        ))
+                                        .color(Color32::RED),
+                                    );
+                                }
+                                lalrpop_util::ParseError::ExtraToken { .. } => {
+                                    ui.label(RichText::new("Extra Token").color(Color32::RED));
+                                }
+                                lalrpop_util::ParseError::User { .. } => {
+                                    ui.label(RichText::new("Parse Error").color(Color32::RED));
+                                }
+                            },
+                        }
                     }
                 });
         });

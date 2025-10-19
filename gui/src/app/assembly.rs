@@ -25,7 +25,7 @@ pub fn update(
     egui::ScrollArea::vertical()
         .auto_shrink([false, true])
         .stick_to_bottom(false)
-        .max_height(600.0)
+        // .max_height(600.0)
         .show(ui, |ui| {
             let output = egui::TextEdit::multiline(&mut state.source)
                 .id("assembly-text-area".into())

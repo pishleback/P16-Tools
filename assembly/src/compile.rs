@@ -1,5 +1,3 @@
-use clap::Command;
-
 use crate::{
     assembly::{Assembly, Label, Line, Meta},
     WithPos, RAM_SIZE_NIBBLES,

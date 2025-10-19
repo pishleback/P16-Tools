@@ -1,0 +1,6 @@
+..ROM 0
+
+# program goes here
+
+# RETURN with nothing on the call stack means halt
+RETURN
