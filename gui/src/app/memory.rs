@@ -12,105 +12,114 @@ pub fn update(
     _frame: &mut eframe::Frame,
     ui: &mut egui::Ui,
 ) {
-    if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
-        let raw_memory = compiled.memory().clone();
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, true])
+        .stick_to_bottom(false)
+        // .max_height(600.0)
+        .show(ui, |ui| {
+            if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
+                let raw_memory = compiled.memory().clone();
 
-        let simulator = state.simulator.simulator();
+                let simulator = state.simulator.simulator();
 
-        // Show ROM pages
-        for rom_page in (0..16).map(|n| Nibble::new(n).unwrap()) {
-            let nibbles = raw_memory.rom_page(rom_page).nibbles();
-            let lines = compiled.rom_lines(rom_page);
-            if !lines.is_empty() {
-                egui::CollapsingHeader::new(format!("ROM {}", rom_page.hex_str())).show(ui, |ui| {
-                    page(
-                        ui,
-                        nibbles,
-                        lines,
-                        state.selected_lines.as_ref().unwrap_or(&HashSet::new()),
-                        simulator
-                            .map(|s| s.get_pc())
-                            .and_then(|ptr| match ptr.page {
-                                ProgramPagePtr::Rom { page } => {
-                                    if page == rom_page {
-                                        Some(ptr.counter)
-                                    } else {
-                                        None
-                                    }
-                                }
-                                ProgramPagePtr::Ram { .. } => None,
-                            }),
-                    );
+                // Show ROM pages
+                for rom_page in (0..16).map(|n| Nibble::new(n).unwrap()) {
+                    let nibbles = raw_memory.rom_page(rom_page).nibbles();
+                    let lines = compiled.rom_lines(rom_page);
+                    if !lines.is_empty() {
+                        egui::CollapsingHeader::new(format!("ROM {}", rom_page.hex_str())).show(
+                            ui,
+                            |ui| {
+                                page(
+                                    ui,
+                                    nibbles,
+                                    lines,
+                                    state.selected_lines.as_ref().unwrap_or(&HashSet::new()),
+                                    simulator
+                                        .map(|s| s.get_pc())
+                                        .and_then(|ptr| match ptr.page {
+                                            ProgramPagePtr::Rom { page } => {
+                                                if page == rom_page {
+                                                    Some(ptr.counter)
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                            ProgramPagePtr::Ram { .. } => None,
+                                        }),
+                                );
+                            },
+                        );
+                    }
+                }
+
+                // Show RAM pages
+                for (ram_page_num, ram_page) in compiled.ram_pages().into_iter().enumerate() {
+                    let live_nibbles = simulator
+                        .map(|s| s.get_memory())
+                        .map(|m| m.ram_page(ram_page.start).nibbles());
+                    let nibbles = raw_memory.ram_page(ram_page.start).nibbles();
+
+                    if live_nibbles
+                        .as_ref()
+                        .map_or_else(|| true, |live_nibbles| nibbles == *live_nibbles)
+                    {
+                        let lines = compiled.ram_lines(ram_page_num);
+                        if !lines.is_empty() {
+                            egui::CollapsingHeader::new(format!("RAM {}", ram_page_num))
+                                .id_salt(format!("RAM {}", ram_page_num))
+                                .show(ui, |ui| {
+                                    page(
+                                        ui,
+                                        nibbles,
+                                        lines,
+                                        state.selected_lines.as_ref().unwrap_or(&HashSet::new()),
+                                        simulator.map(|s| s.get_pc()).and_then(|ptr| {
+                                            match ptr.page {
+                                                ProgramPagePtr::Rom { .. } => None,
+                                                ProgramPagePtr::Ram { addr } => {
+                                                    if addr == ram_page.start {
+                                                        Some(ptr.counter)
+                                                    } else {
+                                                        None
+                                                    }
+                                                }
+                                            }
+                                        }),
+                                    );
+                                });
+                        }
+                    } else {
+                        egui::CollapsingHeader::new(format!("RAM {} (Modified)", ram_page_num))
+                            .id_salt(format!("RAM {}", ram_page_num))
+                            .show(ui, |ui| {
+                                page_raw(
+                                    ui,
+                                    live_nibbles.unwrap(),
+                                    simulator
+                                        .map(|s| s.get_pc())
+                                        .and_then(|ptr| match ptr.page {
+                                            ProgramPagePtr::Rom { .. } => None,
+                                            ProgramPagePtr::Ram { addr } => {
+                                                if addr == ram_page.start {
+                                                    Some(ptr.counter)
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                        }),
+                                );
+                            });
+                    }
+                }
+
+                egui::CollapsingHeader::new("RAM".to_string()).show(ui, |ui| {
+                    let ram_data = simulator
+                        .map_or(raw_memory.ram().clone(), |s| s.get_memory().ram().clone());
+                    ram(ui, ram_data);
                 });
             }
-        }
-
-        // Show RAM pages
-        for (ram_page_num, ram_page) in compiled.ram_pages().into_iter().enumerate() {
-            let live_nibbles = simulator
-                .map(|s| s.get_memory())
-                .map(|m| m.ram_page(ram_page.start).nibbles());
-            let nibbles = raw_memory.ram_page(ram_page.start).nibbles();
-
-            if live_nibbles
-                .as_ref()
-                .map_or_else(|| true, |live_nibbles| nibbles == *live_nibbles)
-            {
-                let lines = compiled.ram_lines(ram_page_num);
-                if !lines.is_empty() {
-                    egui::CollapsingHeader::new(format!("RAM {}", ram_page_num))
-                        .id_salt(format!("RAM {}", ram_page_num))
-                        .show(ui, |ui| {
-                            page(
-                                ui,
-                                nibbles,
-                                lines,
-                                state.selected_lines.as_ref().unwrap_or(&HashSet::new()),
-                                simulator
-                                    .map(|s| s.get_pc())
-                                    .and_then(|ptr| match ptr.page {
-                                        ProgramPagePtr::Rom { .. } => None,
-                                        ProgramPagePtr::Ram { addr } => {
-                                            if addr == ram_page.start {
-                                                Some(ptr.counter)
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                    }),
-                            );
-                        });
-                }
-            } else {
-                egui::CollapsingHeader::new(format!("RAM {} (Modified)", ram_page_num))
-                    .id_salt(format!("RAM {}", ram_page_num))
-                    .show(ui, |ui| {
-                        page_raw(
-                            ui,
-                            live_nibbles.unwrap(),
-                            simulator
-                                .map(|s| s.get_pc())
-                                .and_then(|ptr| match ptr.page {
-                                    ProgramPagePtr::Rom { .. } => None,
-                                    ProgramPagePtr::Ram { addr } => {
-                                        if addr == ram_page.start {
-                                            Some(ptr.counter)
-                                        } else {
-                                            None
-                                        }
-                                    }
-                                }),
-                        );
-                    });
-            }
-        }
-
-        egui::CollapsingHeader::new("RAM".to_string()).show(ui, |ui| {
-            let ram_data =
-                simulator.map_or(raw_memory.ram().clone(), |s| s.get_memory().ram().clone());
-            ram(ui, ram_data);
         });
-    }
 }
 
 fn page(
