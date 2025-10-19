@@ -2,7 +2,7 @@
 # Put the result into registers 0 and 1
 
 .CONST a 63
-.CONST b 4096
+.CONST b 4099
 
 ..ROM 0
 VALUE a
