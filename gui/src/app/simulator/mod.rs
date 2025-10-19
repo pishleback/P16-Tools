@@ -1,7 +1,9 @@
 use assembly::{EndErrorState, Nibble, ProgramMemory, ProgramPtr, Simulator, full_compile};
 use egui::{RichText, Slider};
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod multithreaded;
+#[cfg(target_arch = "wasm32")]
 pub mod singlethreaded;
 
 #[derive(Debug, Clone, Copy)]

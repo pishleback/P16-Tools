@@ -15,10 +15,7 @@ pub fn update(
     if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
         let raw_memory = compiled.memory().clone();
 
-        #[cfg(not(target_arch = "wasm32"))]
         let simulator = state.simulator.simulator();
-        #[cfg(target_arch = "wasm32")]
-        let simulator: Option<&super::simulator::SimulatorState> = None;
 
         // Show ROM pages
         for rom_page in (0..16).map(|n| Nibble::new(n).unwrap()) {

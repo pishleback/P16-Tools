@@ -1,6 +1,7 @@
 use crate::app::simulator::{SimulatorEndState, SimulatorStateTrait};
 use assembly::{Nibble, ProgramMemory, ProgramPtr, Simulator};
 
+
 pub struct SimulatorState {
     simulator: Simulator,
     instructions_per_second: f64,
