@@ -16,7 +16,7 @@ VALUE stack_start # Point at the top of the stack
 ALLOC stack_size
 VALUE -1 # To mark the boundary after the sack
 
-..ROM F
+..ROM 1
 # (value) -> ()
 .LABEL stack_push
 POP %0
