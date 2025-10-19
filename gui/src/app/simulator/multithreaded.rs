@@ -13,8 +13,6 @@ pub struct SimulatorState {
     stop: Arc<Mutex<bool>>,
     run_thread: Option<JoinHandle<SimulatorEndState>>,
     run_result: Option<SimulatorEndState>,
-
-    largest_data_stack: usize,
 }
 
 impl Drop for SimulatorState {
@@ -87,7 +85,6 @@ impl SimulatorStateTrait for SimulatorState {
                 SimulatorEndState::Killed
             })),
             run_result: None,
-            largest_data_stack: 0,
         }
     }
 
@@ -132,18 +129,6 @@ impl SimulatorStateTrait for SimulatorState {
     }
 
     fn get_data_stack(&mut self) -> Vec<u16> {
-        let mut data_stack = self
-            .simulator
-            .lock()
-            .unwrap()
-            .get_data_stack()
-            .into_iter()
-            .rev()
-            .collect::<Vec<_>>();
-        self.largest_data_stack = std::cmp::max(data_stack.len(), self.largest_data_stack);
-        while data_stack.len() < self.largest_data_stack {
-            data_stack.push(0);
-        }
-        data_stack
+        self.simulator.lock().unwrap().get_data_stack()
     }
 }

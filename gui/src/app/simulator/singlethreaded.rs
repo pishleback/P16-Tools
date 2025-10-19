@@ -78,10 +78,6 @@ impl SimulatorStateTrait for SimulatorState {
     }
 
     fn get_data_stack(&mut self) -> Vec<u16> {
-        self.simulator
-            .get_data_stack()
-            .into_iter()
-            .rev()
-            .collect::<Vec<_>>()
+        self.simulator.get_data_stack()
     }
 }

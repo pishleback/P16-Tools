@@ -34,6 +34,7 @@ pub struct State<SimulatorState: SimulatorStateTrait> {
     source: String,
     sim_speed_slider: f64,
     simulator: Option<SimulatorState>,
+    largest_data_stack: usize,
 }
 
 impl<SimulatorState: SimulatorStateTrait> Default for State<SimulatorState> {
@@ -42,6 +43,7 @@ impl<SimulatorState: SimulatorStateTrait> Default for State<SimulatorState> {
             source: Default::default(),
             sim_speed_slider: Default::default(),
             simulator: Default::default(),
+            largest_data_stack: 0,
         }
     }
 }
@@ -69,6 +71,7 @@ impl<SimulatorState: SimulatorStateTrait> State<SimulatorState> {
                 Self::instructions_per_second_from_sim_speed_slider(self.sim_speed_slider),
             )
         });
+        self.largest_data_stack = 1;
     }
 
     fn instructions_per_second_from_sim_speed_slider(t: f64) -> f64 {
@@ -81,6 +84,21 @@ impl<SimulatorState: SimulatorStateTrait> State<SimulatorState> {
 
     pub fn simulator(&self) -> Option<&SimulatorState> {
         self.simulator.as_ref()
+    }
+
+    fn get_data_stack(&mut self) -> Vec<u16> {
+        let mut data_stack = self
+            .simulator
+            .as_mut()
+            .map_or(vec![], |s| s.get_data_stack())
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>();
+        self.largest_data_stack = std::cmp::max(data_stack.len(), self.largest_data_stack);
+        while data_stack.len() < self.largest_data_stack {
+            data_stack.push(0);
+        }
+        data_stack
     }
 }
 
@@ -182,7 +200,7 @@ pub fn update<SimulatorState: SimulatorStateTrait>(
             });
 
             egui::CollapsingHeader::new("Data Stack").show(ui, |ui| {
-                let data_stack = simulator.get_data_stack();
+                let data_stack = state.get_data_stack();
                 for n in data_stack {
                     show_16bit_value(ui, String::new(), n);
                 }
