@@ -7,8 +7,8 @@ The P16 is a general purpose 16-bit redstone CPU. It has
  - An ALU implementing around 30 operations
  - 16 branch conditions based on 5 boolean flags
  - A data stacc (stack accumulator) architecture
- - Hardware call stack
- - Barrel shifter
+ - A hardware call stack
+ - A hardware barrel shifter
 
 👉 [Play with the assembly language and simulator here](https://pishleback.github.io/P16-Tools/)
 
