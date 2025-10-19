@@ -7,8 +7,8 @@ The P16 is a general purpose 16-bit redstone CPU. It has
  - An ALU implementing around 30 operations
  - 16 branch conditions based on 5 boolean flags
  - A data stacc (stack accumulator) architecture
- - Hardware call stack
- - Barrel shifter
+ - A hardware call stack
+ - A hardware barrel shifter
 
 👉 [Play with the assembly language and simulator here](https://pishleback.github.io/P16-Tools/)
 
@@ -18,7 +18,7 @@ The P16 is a general purpose 16-bit redstone CPU. It has
 
 Simple programs can be loaded by manually setting the 32x32 grid of levers on top of the CPU.
 
-There are 16 pages of program ROM in all. The levers on top are page 0. The other 15 pages are made up of 3 pages of torch ROM located directly below the levers, and 12 additional pages of barrel ROM located to the side. Schematics for populating these pages can be generated from an assembly file using the tools in this repository. A quick start guide is included in this file.
+There are 16 pages of program ROM in all. The levers on top are page 0. The other 15 pages are made up of 3 pages of torch ROM located directly below the levers, and 12 additional pages of barrel ROM located to the side. Schematics for populating these pages can be generated from an assembly file using the tools in this repository. A quick start guide is included in this readme.
 
 # Instruction Set and Assembly Language
 
@@ -26,19 +26,15 @@ There are 16 pages of program ROM in all. The levers on top are page 0. The othe
 
 Example assembly files can be found in the `examples` folder.
 
-## Hardware
-
-There are 16 general purpose registers and a data stack.
-
 ## Instructions
 
-Constants may be defined anywhere in the assembly.
+Constants may be defined anywhere in the assembly for use in other instructions.
 
 | Assembly                     | Description                                         |
 | :--------------------------- | :---------------------------------------------------|
 | `.CONSTANT <label> <value>`  | Define the constant `value` and call it `label`.    |
 
-The table below describes the assembly commands and what they do. The last column describes how the instruction is translated into machine code, represented as a string of hexadecimal digits 0-9|A-F with lower case letters representing a hexadecimal digit with a variable value.
+The table below describes the assembly instructions. The last column describes how the instruction is translated into machine code, represented as a string of hexadecimal digits 0-9|A-F with lower case letters representing a hexadecimal digit with a variable value.
 
 | Assembly                     | Description                                                                                                                                                                                                                                                                                                         |  Sets ALU Flags?   | Machine Code                                                                                                                                                                                                                                                                                   |
 | :--------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -94,7 +90,7 @@ The table below describes the assembly commands and what they do. The last colum
 | `RAW <nibbles>`              | Insert raw hexadecimal instructions.                                                                                                                                                                                                                                                                                |  :grey_question:   | `<nibbles>`                                                                                                                                                                                                                                                                                    |
 | `RAW <label>`                | Insert the location of a `.LABEL` within whatever page the label is defined.                                                                                                                                                                                                                                        |  :grey_question:   | `aa` where `aa` is the address of `label` within whatever page it is defined.                                                                                                                                                                                                                  |
 
-There are also some commands for setting up RAM.
+There are also some commands for populating RAM with data.
 
 | Assembly                     | Description                                      |
 | :--------------------------- | :------------------------------------------------|
