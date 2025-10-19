@@ -26,13 +26,9 @@ There are 16 pages of program ROM in all. The levers on top are page 0. The othe
 
 Example assembly files can be found in the `examples` folder.
 
-## Hardware
-
-There are 16 general purpose registers and a data stack.
-
 ## Instructions
 
-Constants may be defined anywhere in the assembly.
+Constants may be defined anywhere in the assembly for use in other instructions.
 
 | Assembly                     | Description                                         |
 | :--------------------------- | :---------------------------------------------------|
