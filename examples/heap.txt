@@ -1,27 +1,67 @@
-.CONST heap_size 100
+# Can be at most 2^15 since 1 bit is used to flag blocks as free or allocated
+.CONST heap_size 7
+# ORed with %F if new is called and there is no enough space to allocate.
+.CONST heap_out_of_memory 1
 
 ..DATA
-VALUE 65535
+ALLOC 2
+VALUE -1
 .LABEL heap_ptr
 VALUE heap_start
 .LABEL heap_start
-ALLOC heap_size
-VALUE 65535
+VALUE heap_size - 1
+ALLOC heap_size - 1
+VALUE -1
 
-..ROM 0
-VALUE 8
-CALL heap_new
-POP %0
-VALUE 10
-CALL heap_new
-POP %1
-RETURN
+# # heap invariants:
+# The heap is a value `heap_ptr` in RAM followed by the heap memory of size `heap_size - 1`.
+# The heap memory is partitioned into blocks
+# A block is either free or allocated
+# A block begins with a metadata value. The least-sig 15 bits are equal to one less than the length of the block i.e. equal to the space available for use withinthe block. The top-most bit is 0 if the block is free and 1 if the block is allocated.
+# The heap pointer always points to the start of a block.
 
-..ROM F
+..ROM 1
 # (size) -> (addr)
 .LABEL heap_new
+POP %0 # size to allocate
+VALUE heap_ptr
+PREAD
+INPUT
+DUP
+POP %1 # heap_ptr
+POP %4 # initial heap_ptr
+.LABEL heap_new_try_block
+PUSH %1 PREAD INPUT # read at heap_ptr
+POP %2 # block metadata
+VALUE 32768 DUP NOT # metadata mask
+AND %2
+POP %3 # size of block
+AND %2
+.USEFLAGS # zero iff block is free
+PSETF
+# If the block is allocated then we want to try the next block
+BRANCH !Z heap_new_unsuitable_block
+# It's a free block. Is it big enough? If not, are there more free blocks after this one which add up to enough space? Whatever the case, merge the series of free blocks into a single free block.
+# TODO
+.LABEL heap_new_unsuitable_block
+# Proceed heap_ptr to the next block. Wrap around if and the end of the heap memory. Out of memory if the next heap pointer is equal to the initial heap pointer.
+# TODO
+JUMP heap_new_try_block
+.LABEL heap_new_suitable_block
+# We have a free block which is big enough. Modify the existing metadata to mark a new allocated block of the requested size.
+# If not using the entire block then we must mark the end as free.
+# TODO
 RETURN
 
 # (addr)
 .LABEL heap_delete
+# Mark the block starting at addr as free.
+# TODO
+RETURN
+
+# End of heap implementation
+
+..ROM 0
+VALUE 3
+CALL heap_new
 RETURN
