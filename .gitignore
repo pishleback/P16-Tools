@@ -1,6 +1,7 @@
 /assembly/target
 /redlang/target
 /gui/target
+/gui/dist
 prog.schem
 prog.json
 prog.txt
