@@ -125,13 +125,17 @@ Condition: Condition = {
     "LE" => Condition::LessEqual,
 }
 
+ConstantExpression: ConstantExpression = {
+    <value:WithPos<SixteenBitNum>> => ConstantExpression::Immediate(value),
+    <lable:Label> => ConstantExpression::Variable(lable),
+}
+
 Line: Line = {
     "RAW" <n:WithPos<Concat<WithPos<NibbleNum>>>> => Line::Command(Command::Raw(n)),
     "RAW" <l:Label> => Line::Command(Command::RawLabel(l)),
 
     "PASS" => Line::Command(Command::Pass),
-    "VALUE" <value:WithPos<SixteenBitNum>> => Line::Command(Command::Value(value)),
-    "VALUE" <l:Label> => Line::Command(Command::ValueLabelled(l)),
+    "VALUE" <value:WithPos<ConstantExpression>> => Line::Command(Command::Value(value)),
     "JUMP" <l:Label> => Line::Command(Command::Jump(l)),
     "BRANCH" <c:WithPos<Condition>> <l:Label> => Line::Command(Command::Branch(c, l)),
     "PUSH" <r:WithPos<Register>> => Line::Command(Command::Push(r)),
@@ -179,8 +183,7 @@ Line: Line = {
     "INPUT" => Line::Command(Command::Input),
     "OUTPUT" <addr:WithPos<DotSepNonEmpty<WithPos<OctDigit>>>> => Line::Command(Command::Output(addr)),
 
-    "ALLOC" <quantity:WithPos<SixteenBitNum>> => Line::Command(Command::Alloc(quantity)),
-    "ALLOC" <l:Label> => Line::Command(Command::AllocLabelled(l)),
+    "ALLOC" <value:WithPos<ConstantExpression>> => Line::Command(Command::Alloc(value)),
 
     "..ROM" <n:WithPos<NibbleNum>> => Line::Meta(Meta::RomPage(n)),
     "..RAM" => Line::Meta(Meta::RamPage),

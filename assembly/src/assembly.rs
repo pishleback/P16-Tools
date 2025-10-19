@@ -43,12 +43,17 @@ pub enum Condition {
 }
 
 #[derive(Debug, Clone)]
+pub enum ConstantExpression {
+    Immediate(WithPos<Option<u16>>), // None if out of range
+    Variable(WithPos<Label>),
+}
+
+#[derive(Debug, Clone)]
 pub enum Command {
     Pass,
     Raw(WithPos<Vec<WithPos<Nibble>>>),
     RawLabel(WithPos<Label>),
-    Value(WithPos<Option<u16>>), // None if out of range
-    ValueLabelled(WithPos<Label>),
+    Value(WithPos<ConstantExpression>),
     Jump(WithPos<Label>),
     Branch(WithPos<Condition>, WithPos<Label>),
     Push(WithPos<Nibble>),
@@ -101,8 +106,7 @@ pub enum Command {
     Input,
     Output(WithPos<Vec<WithPos<OctDigit>>>),
 
-    Alloc(WithPos<Option<u16>>), // None if out of range
-    AllocLabelled(WithPos<Label>),
+    Alloc(WithPos<ConstantExpression>),
 }
 
 #[derive(Debug, Clone)]

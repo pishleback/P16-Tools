@@ -1,5 +1,5 @@
 use crate::{
-    assembly::{Assembly, Label, Line, Meta},
+    assembly::{Assembly, ConstantExpression, Label, Line, Meta},
     WithPos, RAM_SIZE_NIBBLES,
 };
 use crate::{datatypes::Nibble, ProgramMemory};
@@ -115,7 +115,7 @@ struct MemoryManager {
     // keep track of things which are pointing at labels
     labelled_page_location_targets: Vec<(Label, PageLocation, u8)>,
     ram_page_targets: Vec<(usize, PageLocation, u8)>,
-    labelled_constant_targets: Vec<(WithPos<Label>, LayoutPagesLine, MemNibblePtr)>,
+    labelled_constant_targets: Vec<(WithPos<ConstantExpression>, LayoutPagesLine, MemNibblePtr)>,
 
     // keep track of where each RAM page is in RAM
     ram_ident_to_addr: HashMap<usize, u16>,
@@ -280,14 +280,17 @@ impl MemoryManager {
         }
     }
 
-    fn push_labelled_ram_address(
+    fn push_constant_expression(
         &mut self,
-        label: WithPos<Label>,
+        const_expr: WithPos<ConstantExpression>,
         line: LayoutPagesLine,
     ) -> Result<(), CompileError> {
         if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
-            self.labelled_constant_targets
-                .push((label, line, MemNibblePtr::Ram(ram_nibble_ptr)));
+            self.labelled_constant_targets.push((
+                const_expr,
+                line,
+                MemNibblePtr::Ram(ram_nibble_ptr),
+            ));
             self.inc_ram();
             self.inc_ram();
             self.inc_ram();
@@ -348,38 +351,36 @@ impl MemoryManager {
                 .unwrap();
         }
         // Replace RAM labels with addresses
-        for (label, line, blank_nibble_ptr) in &self.labelled_constant_targets {
-            if let Some(address) = self.labelled_constants.get(&label.t).cloned() {
-                self.memory
-                    .set_nibble(
-                        blank_nibble_ptr.clone(),
-                        Nibble::new(((address >> 12) & 15) as u8).unwrap(),
-                    )
-                    .unwrap();
-                self.memory
-                    .set_nibble(
-                        blank_nibble_ptr.offset(1),
-                        Nibble::new(((address >> 8) & 15) as u8).unwrap(),
-                    )
-                    .unwrap();
-                self.memory
-                    .set_nibble(
-                        blank_nibble_ptr.offset(2),
-                        Nibble::new(((address >> 4) & 15) as u8).unwrap(),
-                    )
-                    .unwrap();
-                self.memory
-                    .set_nibble(
-                        blank_nibble_ptr.offset(3),
-                        Nibble::new((address & 15) as u8).unwrap(),
-                    )
-                    .unwrap();
-            } else {
-                return Err(CompileError::MissingConstLabel {
-                    line: line.assembly_line_num,
-                    label: label.clone(),
-                });
-            }
+        for (const_expr, line, blank_nibble_ptr) in &self.labelled_constant_targets {
+            let value = evaluate_constant_expression(
+                &const_expr.t,
+                &self.labelled_constants,
+                line.assembly_line_num,
+            )?;
+            self.memory
+                .set_nibble(
+                    blank_nibble_ptr.clone(),
+                    Nibble::new(((value >> 12) & 15) as u8).unwrap(),
+                )
+                .unwrap();
+            self.memory
+                .set_nibble(
+                    blank_nibble_ptr.offset(1),
+                    Nibble::new(((value >> 8) & 15) as u8).unwrap(),
+                )
+                .unwrap();
+            self.memory
+                .set_nibble(
+                    blank_nibble_ptr.offset(2),
+                    Nibble::new(((value >> 4) & 15) as u8).unwrap(),
+                )
+                .unwrap();
+            self.memory
+                .set_nibble(
+                    blank_nibble_ptr.offset(3),
+                    Nibble::new((value & 15) as u8).unwrap(),
+                )
+                .unwrap();
         }
 
         Ok(self.memory)
@@ -564,14 +565,14 @@ impl<'a> MemoryPageManager<'a> {
         self.inc();
         Ok(())
     }
-    fn push_labelled_ram_address(
+    fn push_constant_expression(
         &mut self,
-        label: WithPos<Label>,
+        const_expr: WithPos<ConstantExpression>,
         line: LayoutPagesLine,
     ) -> Result<(), CompileError> {
         self.check_is_full()?;
         self.memory_manager.labelled_constant_targets.push((
-            label,
+            const_expr,
             line,
             self.page.nibble_ptr(self.ptr.unwrap()),
         ));
@@ -581,6 +582,29 @@ impl<'a> MemoryPageManager<'a> {
         self.check_is_full()?;
         self.inc();
         Ok(())
+    }
+}
+
+fn evaluate_constant_expression(
+    const_expr: &ConstantExpression,
+    variables: &HashMap<Label, u16>,
+    line: usize,
+) -> Result<u16, CompileError> {
+    match const_expr {
+        ConstantExpression::Immediate(value) => {
+            if let Some(value) = value.t {
+                Ok(value)
+            } else {
+                Err(CompileError::Invalid16BitValue { line })
+            }
+        }
+        ConstantExpression::Variable(label) => {
+            if let Some(&value) = variables.get(&label.t) {
+                Ok(value)
+            } else {
+                Err(CompileError::MissingConstLabel { line, label: label.clone() })
+            }
+        }
     }
 }
 
@@ -868,26 +892,9 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     }
                                     code.push_labelled_page_location(label.t)?;
                                 }
-                                crate::assembly::Command::Value(WithPos { t: v, .. }) => {
-                                    if v.is_none() {
-                                        return Err(CompileError::Invalid16BitValue {
-                                            line: line.assembly_line_num,
-                                        });
-                                    }
-                                    let v = v.unwrap();
+                                crate::assembly::Command::Value(const_expr) => {
                                     code.push(1)?;
-                                    let a = (v & 15) as u8;
-                                    let b = ((v >> 4) & 15) as u8;
-                                    let c = ((v >> 8) & 15) as u8;
-                                    let d = ((v >> 12) & 15) as u8;
-                                    code.push(d)?;
-                                    code.push(c)?;
-                                    code.push(b)?;
-                                    code.push(a)?;
-                                }
-                                crate::Command::ValueLabelled(label) => {
-                                    code.push(1)?;
-                                    code.push_labelled_ram_address(label, line.clone())?;
+                                    code.push_constant_expression(const_expr, line.clone())?;
                                 }
                                 crate::assembly::Command::Jump(label) => {
                                     code.unreachable_flags();
@@ -1224,7 +1231,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     }
                                     // Can't flush flags. Output instructions may or may not block.
                                 }
-                                crate::Command::Alloc(_) | crate::Command::AllocLabelled(_) => {
+                                crate::Command::Alloc(_) => {
                                     return Err(CompileError::InvalidCommandLocation {
                                         line: line.assembly_line_num,
                                     });
@@ -1292,42 +1299,21 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                 for line in lines {
                     match line.line.t.clone() {
                         Line::Command(command) => match command {
-                            crate::Command::Value(WithPos { t: v, .. }) => {
-                                if v.is_none() {
-                                    return Err(CompileError::Invalid16BitValue {
-                                        line: line.assembly_line_num,
-                                    });
-                                }
-                                code.push_ram(v.unwrap())?;
+                            crate::Command::Value(const_expr) => {
+                                code.push_constant_expression(const_expr, line.clone())?;
                             }
-                            crate::Command::ValueLabelled(label) => {
-                                code.push_labelled_ram_address(label, line.clone())?;
-                            }
-                            crate::Command::Alloc(value) => {
-                                if value.t.is_none() {
-                                    return Err(CompileError::Invalid16BitValue {
-                                        line: line.assembly_line_num,
-                                    });
-                                }
-                                let quantity = value.t.unwrap();
+
+                            crate::Command::Alloc(quantity) => {
+                                let quantity = evaluate_constant_expression(
+                                    &quantity.t,
+                                    &page_layout.labelled_constants,
+                                    line.assembly_line_num,
+                                )?;
                                 for _ in 0..quantity {
                                     code.push_ram(0)?;
                                 }
                             }
-                            crate::Command::AllocLabelled(label) => {
-                                if let Some(&quantity) =
-                                    page_layout.labelled_constants.get(&label.t)
-                                {
-                                    for _ in 0..quantity {
-                                        code.push_ram(0)?;
-                                    }
-                                } else {
-                                    return Err(CompileError::MissingConstLabel {
-                                        line: line.assembly_line_num,
-                                        label: label.clone(),
-                                    });
-                                }
-                            }
+
                             _ => {
                                 return Err(CompileError::InvalidCommandLocation {
                                     line: line.assembly_line_num,

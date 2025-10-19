@@ -1,0 +1,27 @@
+.CONST heap_size 100
+
+..DATA
+VALUE 65535
+.LABEL heap_ptr
+VALUE heap_start
+.LABEL heap_start
+ALLOC heap_size
+VALUE 65535
+
+..ROM 0
+VALUE 8
+CALL heap_new
+POP %0
+VALUE 10
+CALL heap_new
+POP %1
+RETURN
+
+..ROM F
+# (size) -> (addr)
+.LABEL heap_new
+RETURN
+
+# (addr)
+.LABEL heap_delete
+RETURN

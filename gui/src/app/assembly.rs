@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use crate::app::state::State;
 use assembly::{
-    Command, CompileError, FullCompileResult, Label, LayoutPagesError, Line, Meta, Nibble, WithPos,
+    Command, CompileError, ConstantExpression, FullCompileResult, Label, LayoutPagesError, Line,
+    Meta, Nibble, WithPos,
 };
 use btree_range_map::RangeMap;
 use egui::{Color32, Stroke, TextBuffer, TextFormat, Visuals, text::LayoutJob};
@@ -147,11 +148,31 @@ fn layout_job(
                     );
                 };
 
+                // constant expressions
+                let add_constant_expression =
+                    |text_attrs: &mut TextAttrs, const_expr: &WithPos<ConstantExpression>| {
+                        text_attrs.colour.insert(
+                            const_expr.start..const_expr.end,
+                            visuals.text_color().lerp_to_gamma(
+                                Color32::CYAN.lerp_to_gamma(Color32::GREEN, 0.5),
+                                0.5,
+                            ),
+                        );
+                        match &const_expr.t {
+                            ConstantExpression::Immediate(value) => {
+                                add_value(text_attrs, value);
+                            }
+                            ConstantExpression::Variable(label) => {
+                                add_label(text_attrs, label);
+                            }
+                        }
+                    };
+
                 // syntax highlighting
                 match line {
                     Line::Command(command) => match command {
-                        Command::Value(v) => {
-                            add_value(&mut text_attrs, v);
+                        Command::Value(const_expr) => {
+                            add_constant_expression(&mut text_attrs, const_expr);
                         }
                         Command::Push(register)
                         | Command::Pop(register)
@@ -173,9 +194,6 @@ fn layout_job(
                         | Command::AddWithCarry(register)
                         | Command::SubWithCarry(register) => {
                             add_register(&mut text_attrs, register);
-                        }
-                        Command::ValueLabelled(label) => {
-                            add_label(&mut text_attrs, label);
                         }
                         Command::Jump(label) => {
                             add_label(&mut text_attrs, label);
@@ -212,13 +230,8 @@ fn layout_job(
                         Command::RawLabel(label) => {
                             add_label(&mut text_attrs, label);
                         }
-                        Command::Alloc(quantity) => {
-                            text_attrs
-                                .colour
-                                .insert(quantity.start..quantity.end, visuals.text_color());
-                        }
-                        Command::AllocLabelled(label) => {
-                            add_label(&mut text_attrs, label);
+                        Command::Alloc(const_expr) => {
+                            add_constant_expression(&mut text_attrs, const_expr);
                         }
                         _ => {}
                     },
@@ -354,17 +367,9 @@ fn layout_job(
                         }
                         CompileError::MissingConstLabel { line, .. } => {
                             let line = assembly.line_with_pos(*line);
-                            match &line.t {
-                                Line::Command(Command::ValueLabelled(label))
-                                | Line::Command(Command::AllocLabelled(label)) => {
-                                    text_attrs
-                                        .underline
-                                        .insert(label.start..label.end, red_underline);
-                                }
-                                _ => panic!(
-                                    "Other lines should not panic here since they have no label argument."
-                                ),
-                            }
+                            text_attrs
+                                .underline
+                                .insert(line.start..line.end, red_underline);
                         }
                         CompileError::DuplicateConstLabel { line, .. } => {
                             let line = assembly.line_with_pos(*line);

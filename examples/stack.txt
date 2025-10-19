@@ -1,0 +1,35 @@
+.CONST stack_size 100
+
+..DATA
+VALUE 65535
+.LABEL stack_ptr
+VALUE stack_start
+.LABEL stack_start
+ALLOC stack_size
+VALUE 65535
+
+..ROM 0
+.LABEL loop
+VALUE 117
+CALL stack_push
+JUMP loop
+RETURN
+
+..ROM F
+# (value) -> ()
+.LABEL stack_push # (value)
+POP %0
+VALUE stack_ptr
+KREAD
+POP %1
+INPUT
+KWRITE %0
+INC
+POP %2
+PUSH %1
+PWRITE %2
+RETURN
+
+# () -> (value)
+.LABEL stack_pop
+RETURN
