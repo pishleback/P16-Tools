@@ -115,6 +115,10 @@ impl SimulatorStateTrait for SimulatorState {
         *self.instructions_to_do.lock().unwrap() += 1.0;
     }
 
+    fn process(&mut self, _max_time: std::time::Duration) {
+        // Everything is done in another thread
+    }
+
     fn get_reg(&self, nibble: Nibble) -> u16 {
         self.simulator.lock().unwrap().get_reg(nibble)
     }

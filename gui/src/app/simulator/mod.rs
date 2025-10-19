@@ -1,6 +1,8 @@
 use assembly::{EndErrorState, Nibble, ProgramMemory, ProgramPtr, Simulator, full_compile};
 use egui::{RichText, Slider};
+
 pub mod multithreaded;
+pub mod singlethreaded;
 
 #[derive(Debug, Clone, Copy)]
 pub enum SimulatorEndState {
@@ -18,6 +20,8 @@ pub trait SimulatorStateTrait {
     fn get_instructions_per_second(&mut self) -> f64;
     fn end_state(&mut self) -> Option<SimulatorEndState>;
     fn one_step(&mut self);
+
+    fn process(&mut self, max_time: std::time::Duration);
 
     fn get_reg(&self, nibble: Nibble) -> u16;
     fn get_pc(&self) -> ProgramPtr;
@@ -67,7 +71,11 @@ impl<SimulatorState: SimulatorStateTrait> State<SimulatorState> {
     }
 
     fn instructions_per_second_from_sim_speed_slider(t: f64) -> f64 {
-        if t <= 0.0 { 0.0 } else { 10f64.powf(SimulatorState::MAX_ISP_EXP * t) }
+        if t <= 0.0 {
+            0.0
+        } else {
+            10f64.powf(SimulatorState::MAX_ISP_EXP * t)
+        }
     }
 
     pub fn simulator(&self) -> Option<&SimulatorState> {
@@ -81,6 +89,10 @@ pub fn update<SimulatorState: SimulatorStateTrait>(
     _frame: &mut eframe::Frame,
     ui: &mut egui::Ui,
 ) {
+    if let Some(simulator) = state.simulator.as_mut() {
+        simulator.process(std::time::Duration::from_millis(10));
+    }
+
     if state.is_compiled() {
         ui.horizontal(|ui| {
             if let Some(simulator) = state.simulator.as_mut() {

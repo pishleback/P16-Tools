@@ -1,4 +1,3 @@
-#[cfg(not(target_arch = "wasm32"))]
 use crate::app::simulator;
 use assembly::{FullCompileResult, full_compile};
 use egui::{Color32, RichText};
@@ -12,6 +11,8 @@ pub struct State {
     #[serde(skip)]
     #[cfg(not(target_arch = "wasm32"))]
     pub simulator: simulator::State<simulator::multithreaded::SimulatorState>,
+    #[cfg(target_arch = "wasm32")]
+    pub simulator: simulator::State<simulator::singlethreaded::SimulatorState>,
 }
 
 impl Default for State {
@@ -19,10 +20,8 @@ impl Default for State {
         let mut state = Self {
             source: "".into(),
             selected_lines: None,
-            #[cfg(not(target_arch = "wasm32"))]
             simulator: simulator::State::default(),
         };
-        #[cfg(not(target_arch = "wasm32"))]
         state.simulator.update_source(&state.source);
         state
     }
@@ -39,7 +38,6 @@ impl State {
             .and_then(|inner| inner.0.ok().and_then(|inner| inner.0.ok()))
             .map(|compile_success| compile_success.memory().clone());
 
-        #[cfg(not(target_arch = "wasm32"))]
         self.simulator.update_source(&source);
 
         egui::Window::new("Assembly").show(ctx, |ui| {
@@ -50,7 +48,6 @@ impl State {
             super::memory::update(self, &compile_result, ctx, frame, ui);
         });
 
-        #[cfg(not(target_arch = "wasm32"))]
         egui::Window::new("Simulator").show(ctx, |ui| {
             simulator::update(&mut self.simulator, ctx, frame, ui);
         });
