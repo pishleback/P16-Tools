@@ -134,7 +134,7 @@ The possible values for `condition` in the `BRANCH` instruction and their meanin
 | `GT`     | Greater Than          | `N`=`V` and not `Z` | `E`          |
 | `LE`     | Less or Equal         | `N`≠`V` or `Z`      | `F`          |
 
-Comments can come after `#` characters in or part way through any line, similar to Python.
+Comments can be put anywhere after a `#` character.
 
 # Getting started
 
