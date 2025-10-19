@@ -115,7 +115,7 @@ impl SimulatorStateTrait for SimulatorState {
         *self.instructions_to_do.lock().unwrap() += 1.0;
     }
 
-    fn process(&mut self, _max_time: std::time::Duration) {
+    fn process(&mut self, _max_time: chrono::TimeDelta) {
         // Everything is done in another thread
     }
 

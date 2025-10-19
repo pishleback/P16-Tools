@@ -3,7 +3,6 @@ use egui::{RichText, Slider};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod multithreaded;
-#[cfg(target_arch = "wasm32")]
 pub mod singlethreaded;
 
 #[derive(Debug, Clone, Copy)]
@@ -23,7 +22,7 @@ pub trait SimulatorStateTrait {
     fn end_state(&mut self) -> Option<SimulatorEndState>;
     fn one_step(&mut self);
 
-    fn process(&mut self, max_time: std::time::Duration);
+    fn process(&mut self, max_time: chrono::TimeDelta);
 
     fn get_reg(&self, nibble: Nibble) -> u16;
     fn get_pc(&self) -> ProgramPtr;
@@ -92,7 +91,7 @@ pub fn update<SimulatorState: SimulatorStateTrait>(
     ui: &mut egui::Ui,
 ) {
     if let Some(simulator) = state.simulator.as_mut() {
-        simulator.process(std::time::Duration::from_millis(10));
+        simulator.process(chrono::TimeDelta::milliseconds(10));
     }
 
     if state.is_compiled() {

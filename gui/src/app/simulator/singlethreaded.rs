@@ -1,11 +1,11 @@
 use crate::app::simulator::{SimulatorEndState, SimulatorStateTrait};
 use assembly::{Nibble, ProgramMemory, ProgramPtr, Simulator};
 
-
+#[allow(dead_code)]
 pub struct SimulatorState {
     simulator: Simulator,
     instructions_per_second: f64,
-    prev_time: std::time::SystemTime,
+    prev_time: chrono::DateTime<chrono::Utc>,
     end_state: Option<SimulatorEndState>,
     instructions_to_do: f64,
 }
@@ -17,7 +17,7 @@ impl SimulatorStateTrait for SimulatorState {
         Self {
             simulator,
             instructions_per_second,
-            prev_time: std::time::SystemTime::now(),
+            prev_time: chrono::Utc::now(),
             instructions_to_do: 0.0,
             end_state: None,
         }
@@ -52,19 +52,11 @@ impl SimulatorStateTrait for SimulatorState {
         }
     }
 
-    fn process(&mut self, max_time: std::time::Duration) {
-        let start_time = std::time::SystemTime::now();
-        self.instructions_to_do += self.instructions_per_second
-            * start_time
-                .duration_since(self.prev_time)
-                .unwrap()
-                .as_secs_f64();
-        while std::time::SystemTime::now()
-            .duration_since(start_time)
-            .unwrap()
-            < max_time
-            && self.instructions_to_do > 1.0
-        {
+    fn process(&mut self, max_time: chrono::TimeDelta) {
+        let start_time = chrono::Utc::now();
+        self.instructions_to_do +=
+            self.instructions_per_second * (start_time - self.prev_time).as_seconds_f64();
+        while chrono::Utc::now() - start_time < max_time && self.instructions_to_do > 1.0 {
             self.one_step();
             self.instructions_to_do -= 1.0;
         }
