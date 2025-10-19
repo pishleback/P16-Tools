@@ -6,8 +6,13 @@ use std::collections::HashSet;
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct State {
     pub source: String,
+
     #[serde(skip)]
     pub selected_lines: Option<HashSet<usize>>, // which lines of assembly are highlighted
+
+     #[serde(skip)]
+     pub memory: super::memory::MemoryState,
+
     #[cfg(not(target_arch = "wasm32"))]
     #[serde(skip)]
     pub simulator: simulator::State<simulator::multithreaded::SimulatorState>,
@@ -21,7 +26,8 @@ impl Default for State {
         let mut state = Self {
             source: "".into(),
             selected_lines: None,
-            simulator: simulator::State::default(),
+            memory: Default::default(),
+            simulator: Default::default(),
         };
         state.simulator.update_source(&state.source);
         state

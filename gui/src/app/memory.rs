@@ -5,8 +5,21 @@ use assembly::{ProgramPagePtr, RamMem};
 use egui::{Color32, TextBuffer, TextFormat, Ui, Visuals, text::LayoutJob};
 use std::collections::HashSet;
 
+#[derive(Debug, PartialEq, Eq, Default, Clone, Copy)]
+enum RamDataFormat {
+    #[default]
+    Hex,
+    Dec,
+    Bin,
+}
+
+#[derive(Default)]
+pub struct MemoryState {
+    ram_data_format: RamDataFormat,
+}
+
 pub fn update(
-    state: &State,
+    state: &mut State,
     compile_result: &FullCompileResult,
     _ctx: &egui::Context,
     _frame: &mut eframe::Frame,
@@ -19,8 +32,6 @@ pub fn update(
         .show(ui, |ui| {
             if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
                 let raw_memory = compiled.memory().clone();
-
-                let simulator = state.simulator.simulator();
 
                 // Show ROM pages
                 for rom_page in (0..16).map(|n| Nibble::new(n).unwrap()) {
@@ -35,9 +46,8 @@ pub fn update(
                                     nibbles,
                                     lines,
                                     state.selected_lines.as_ref().unwrap_or(&HashSet::new()),
-                                    simulator
-                                        .map(|s| s.get_pc())
-                                        .and_then(|ptr| match ptr.page {
+                                    state.simulator.simulator().map(|s| s.get_pc()).and_then(
+                                        |ptr| match ptr.page {
                                             ProgramPagePtr::Rom { page } => {
                                                 if page == rom_page {
                                                     Some(ptr.counter)
@@ -46,7 +56,8 @@ pub fn update(
                                                 }
                                             }
                                             ProgramPagePtr::Ram { .. } => None,
-                                        }),
+                                        },
+                                    ),
                                 );
                             },
                         );
@@ -55,7 +66,9 @@ pub fn update(
 
                 // Show RAM pages
                 for (ram_page_num, ram_page) in compiled.ram_pages().into_iter().enumerate() {
-                    let live_nibbles = simulator
+                    let live_nibbles = state
+                        .simulator
+                        .simulator()
                         .map(|s| s.get_memory())
                         .map(|m| m.ram_page(ram_page.start).nibbles());
                     let nibbles = raw_memory.ram_page(ram_page.start).nibbles();
@@ -74,8 +87,8 @@ pub fn update(
                                         nibbles,
                                         lines,
                                         state.selected_lines.as_ref().unwrap_or(&HashSet::new()),
-                                        simulator.map(|s| s.get_pc()).and_then(|ptr| {
-                                            match ptr.page {
+                                        state.simulator.simulator().map(|s| s.get_pc()).and_then(
+                                            |ptr| match ptr.page {
                                                 ProgramPagePtr::Rom { .. } => None,
                                                 ProgramPagePtr::Ram { addr } => {
                                                     if addr == ram_page.start {
@@ -84,8 +97,8 @@ pub fn update(
                                                         None
                                                     }
                                                 }
-                                            }
-                                        }),
+                                            },
+                                        ),
                                     );
                                 });
                         }
@@ -96,9 +109,8 @@ pub fn update(
                                 page_raw(
                                     ui,
                                     live_nibbles.unwrap(),
-                                    simulator
-                                        .map(|s| s.get_pc())
-                                        .and_then(|ptr| match ptr.page {
+                                    state.simulator.simulator().map(|s| s.get_pc()).and_then(
+                                        |ptr| match ptr.page {
                                             ProgramPagePtr::Rom { .. } => None,
                                             ProgramPagePtr::Ram { addr } => {
                                                 if addr == ram_page.start {
@@ -107,16 +119,46 @@ pub fn update(
                                                     None
                                                 }
                                             }
-                                        }),
+                                        },
+                                    ),
                                 );
                             });
                     }
                 }
 
                 egui::CollapsingHeader::new("RAM".to_string()).show(ui, |ui| {
-                    let ram_data = simulator
+                    ui.horizontal(|ui| {
+                        ui.label("RAM Formatting");
+                        egui::ComboBox::from_id_salt("RAM Value Format")
+                            .selected_text(match &state.memory.ram_data_format {
+                                RamDataFormat::Hex => "Hex",
+                                RamDataFormat::Dec => "Decimal",
+                                RamDataFormat::Bin => "Binary",
+                            })
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut state.memory.ram_data_format,
+                                    RamDataFormat::Hex,
+                                    "Hex",
+                                );
+                                ui.selectable_value(
+                                    &mut state.memory.ram_data_format,
+                                    RamDataFormat::Dec,
+                                    "Decimal",
+                                );
+                                ui.selectable_value(
+                                    &mut state.memory.ram_data_format,
+                                    RamDataFormat::Bin,
+                                    "Binary",
+                                );
+                            });
+                    });
+
+                    let ram_data = state
+                        .simulator
+                        .simulator()
                         .map_or(raw_memory.ram().clone(), |s| s.get_memory().ram().clone());
-                    ram(ui, ram_data);
+                    ram(ui, ram_data, state.memory.ram_data_format);
                 });
             }
         });
@@ -256,7 +298,7 @@ fn page_raw(ui: &mut Ui, nibbles: Vec<Nibble>, pc: Option<u8>) {
     );
 }
 
-fn ram(ui: &mut Ui, ram: RamMem) {
+fn ram(ui: &mut Ui, ram: RamMem, ram_data_format: RamDataFormat) {
     let mut layouter = |ui: &egui::Ui, _text: &dyn TextBuffer, wrap_width: f32| {
         let max_chars = {
             let char_width = ui.fonts(|fonts| {
@@ -269,12 +311,17 @@ fn ram(ui: &mut Ui, ram: RamMem) {
             std::cmp::max(max_chars, 1)
         };
 
-        let mut job = layout_job(ui.visuals(), max_chars, &ram);
+        let mut job = layout_job(ui.visuals(), max_chars, &ram, ram_data_format);
         job.wrap.max_width = wrap_width;
         ui.fonts(|f| f.layout_job(job))
     };
 
-    fn layout_job(visuals: &Visuals, max_width: usize, ram: &RamMem) -> LayoutJob {
+    fn layout_job(
+        visuals: &Visuals,
+        max_width: usize,
+        ram: &RamMem,
+        ram_data_format: RamDataFormat,
+    ) -> LayoutJob {
         let rpad_to_len = |mut s: String, n: usize, c: char| -> String {
             while s.len() < n {
                 s += &String::from(c);
@@ -288,8 +335,8 @@ fn ram(ui: &mut Ui, ram: RamMem) {
             s
         };
 
-        let format_decimal = (
-            |v: u16| -> String { lpad_to_len(format!("{}", v), 5, ' ') },
+        let format_dec = (
+            |v: u16| -> String { rpad_to_len(format!("{}", v), 5, ' ') },
             5usize,
         );
         let format_hex = (
@@ -309,7 +356,12 @@ fn ram(ui: &mut Ui, ram: RamMem) {
             16usize,
         );
 
-        let (format_value, value_width) = format_hex;
+        let (format_value, value_width): (Box<dyn Fn(u16) -> String>, usize) = match ram_data_format
+        {
+            RamDataFormat::Bin => (Box::new(|x| format_bin.0(x)), format_bin.1),
+            RamDataFormat::Hex => (Box::new(|x| format_hex.0(x)), format_hex.1),
+            RamDataFormat::Dec => (Box::new(|x| format_dec.0(x)), format_dec.1),
+        };
         let (format_addr, addr_width) = format_hex;
 
         let col_width = std::cmp::max(value_width, addr_width);
