@@ -111,28 +111,28 @@ There are four ALU flags `Z`, `N`, `C`, and `V` and an additional flag `I`. The 
 
 The possible values for `condition` in the `BRANCH` instruction and their meaning in terms of the 5 flags are:
 
-| Assembly | Name                  | Branches When    | Machine Code |
-| :------- | :-------------------- | :--------------- | :----------- |
-| `I`      | Input queue non-empty | `I`              | `0`          |
-| `!I`     | Input queue empty     | !`I`             | `1`          |
-| `Z`      | Zero flag set         | `Z`              | `2`          |
-| `!Z`     | Zero flag clear       | !`Z`             | `3`          |
-| `N`      | Negative flag set     | `N`              | `4`          |
-| `!N`     | Negative flag clear   | !`N`             | `5`          |
-| `C`      | Carry flag set        | `C`              | `8`          |
-| `!C`     | Carry flag clear      | !`C`             | `9`          |
-| `V`      | Overflow flag set     | `V`              | `6`          |
-| `!V`     | Overflow flag clear   | !`V`             | `7`          |
-| `EQ`     | Equal                 | `Z`              | `2`          |
-| `NE`     | Not Equal             | !`Z`             | `3`          |
-| `HS`     | Higher or Same        | `C`              | `8`          |
-| `LO`     | Lower                 | !`C`             | `9`          |
-| `HI`     | Higher                | `C` and !`Z`     | `A`          |
-| `LS`     | Lower or Same         | !`C` or `Z`      | `B`          |
-| `GE`     | Greater or Equal      | `N`=`V`          | `C`          |
-| `LT`     | Less Than             | `N`≠`V`          | `D`          |
-| `GT`     | Greater Than          | `N`=`V` and !`Z` | `E`          |
-| `LE`     | Less or Equal         | `N`≠`V` or `Z`   | `F`          |
+| Assembly | Name                  | Branches When       | Machine Code |
+| :------- | :-------------------- | :------------------ | :----------- |
+| `I`      | Input queue non-empty | `I`                 | `0`          |
+| `!I`     | Input queue empty     | not `I`             | `1`          |
+| `Z`      | Zero flag set         | `Z`                 | `2`          |
+| `!Z`     | Zero flag clear       | not `Z`             | `3`          |
+| `N`      | Negative flag set     | `N`                 | `4`          |
+| `!N`     | Negative flag clear   | not `N`             | `5`          |
+| `C`      | Carry flag set        | `C`                 | `8`          |
+| `!C`     | Carry flag clear      | not `C`             | `9`          |
+| `V`      | Overflow flag set     | `V`                 | `6`          |
+| `!V`     | Overflow flag clear   | not `V`             | `7`          |
+| `EQ`     | Equal                 | `Z`                 | `2`          |
+| `NE`     | Not Equal             | not `Z`             | `3`          |
+| `HS`     | Higher or Same        | `C`                 | `8`          |
+| `LO`     | Lower                 | not `C`             | `9`          |
+| `HI`     | Higher                | `C` and not `Z`     | `A`          |
+| `LS`     | Lower or Same         | `Z` or not `C`      | `B`          |
+| `GE`     | Greater or Equal      | `N`=`V`             | `C`          |
+| `LT`     | Less Than             | `N`≠`V`             | `D`          |
+| `GT`     | Greater Than          | `N`=`V` and not `Z` | `E`          |
+| `LE`     | Less or Equal         | `N`≠`V` or `Z`      | `F`          |
 
 Comments come after a `#` character, similar to Python.
 
