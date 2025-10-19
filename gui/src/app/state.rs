@@ -8,10 +8,11 @@ pub struct State {
     pub source: String,
     #[serde(skip)]
     pub selected_lines: Option<HashSet<usize>>, // which lines of assembly are highlighted
-    #[serde(skip)]
     #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
     pub simulator: simulator::State<simulator::multithreaded::SimulatorState>,
     #[cfg(target_arch = "wasm32")]
+    #[serde(skip)]
     pub simulator: simulator::State<simulator::singlethreaded::SimulatorState>,
 }
 
