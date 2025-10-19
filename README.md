@@ -136,7 +136,7 @@ The possible values for `condition` in the `BRANCH` instruction and their meanin
 
 Comments can be put anywhere after a `#` character.
 
-# Getting started
+# Command-line Tools
 
 ## Prerequisites
 
