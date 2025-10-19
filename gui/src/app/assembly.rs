@@ -125,54 +125,74 @@ fn layout_job(
                     .insert(*start..*end, visuals.strong_text_color());
 
                 // labels
-                let add_label = |text_attrs: &mut TextAttrs, label: &WithPos<Label>| {
+                fn add_label(
+                    visuals: &Visuals,
+                    text_attrs: &mut TextAttrs,
+                    label: &WithPos<Label>,
+                ) {
                     text_attrs.colour.insert(
                         label.start..label.end,
                         visuals.text_color().lerp_to_gamma(Color32::GREEN, 0.5),
                     );
-                };
+                }
 
                 // registers
-                let add_register = |text_attrs: &mut TextAttrs, register: &WithPos<Nibble>| {
+                fn add_register(
+                    visuals: &Visuals,
+                    text_attrs: &mut TextAttrs,
+                    register: &WithPos<Nibble>,
+                ) {
                     text_attrs.colour.insert(
                         register.start..register.end,
                         visuals.text_color().lerp_to_gamma(Color32::YELLOW, 0.5),
                     );
-                };
+                }
 
                 // values
-                let add_value = |text_attrs: &mut TextAttrs, value: &WithPos<Option<u16>>| {
+                fn add_value(
+                    visuals: &Visuals,
+                    text_attrs: &mut TextAttrs,
+                    value: &WithPos<Option<u16>>,
+                ) {
                     text_attrs.colour.insert(
                         value.start..value.end,
                         visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
                     );
-                };
+                }
 
                 // constant expressions
-                let add_constant_expression =
-                    |text_attrs: &mut TextAttrs, const_expr: &WithPos<ConstantExpression>| {
-                        text_attrs.colour.insert(
-                            const_expr.start..const_expr.end,
-                            visuals.text_color().lerp_to_gamma(
-                                Color32::CYAN.lerp_to_gamma(Color32::GREEN, 0.5),
-                                0.5,
-                            ),
-                        );
-                        match &const_expr.t {
-                            ConstantExpression::Immediate(value) => {
-                                add_value(text_attrs, value);
-                            }
-                            ConstantExpression::Variable(label) => {
-                                add_label(text_attrs, label);
-                            }
+                fn add_constant_expression(
+                    visuals: &Visuals,
+                    text_attrs: &mut TextAttrs,
+                    const_expr: &WithPos<ConstantExpression>,
+                ) {
+                    text_attrs.colour.insert(
+                        const_expr.start..const_expr.end,
+                        visuals
+                            .text_color()
+                            .lerp_to_gamma(Color32::CYAN.lerp_to_gamma(Color32::GREEN, 0.5), 0.5),
+                    );
+                    match &const_expr.t {
+                        ConstantExpression::Immediate(value) => {
+                            add_value(visuals, text_attrs, value);
                         }
-                    };
+                        ConstantExpression::Variable(label) => {
+                            add_label(visuals, text_attrs, label);
+                        }
+                        ConstantExpression::Add(a, b)
+                        | ConstantExpression::Sub(a, b)
+                        | ConstantExpression::Mul(a, b) => {
+                            add_constant_expression(visuals, text_attrs, a);
+                            add_constant_expression(visuals, text_attrs, b);
+                        }
+                    }
+                }
 
                 // syntax highlighting
                 match line {
                     Line::Command(command) => match command {
                         Command::Value(const_expr) => {
-                            add_constant_expression(&mut text_attrs, const_expr);
+                            add_constant_expression(visuals, &mut text_attrs, const_expr);
                         }
                         Command::Push(register)
                         | Command::Pop(register)
@@ -193,27 +213,27 @@ fn layout_job(
                         | Command::SwapSub(register)
                         | Command::AddWithCarry(register)
                         | Command::SubWithCarry(register) => {
-                            add_register(&mut text_attrs, register);
+                            add_register(visuals, &mut text_attrs, register);
                         }
                         Command::Jump(label) => {
-                            add_label(&mut text_attrs, label);
+                            add_label(visuals, &mut text_attrs, label);
                         }
                         Command::Branch(condition, label) => {
                             text_attrs.colour.insert(
                                 condition.start..condition.end,
                                 visuals.text_color().lerp_to_gamma(Color32::BROWN, 0.5),
                             );
-                            add_label(&mut text_attrs, label);
+                            add_label(visuals, &mut text_attrs, label);
                         }
                         Command::Call(label) => {
-                            add_label(&mut text_attrs, label);
+                            add_label(visuals, &mut text_attrs, label);
                         }
                         Command::Rotate { shift, register } => {
                             text_attrs.colour.insert(
                                 shift.start..shift.end,
                                 visuals.text_color().lerp_to_gamma(Color32::CYAN, 0.5),
                             );
-                            add_register(&mut text_attrs, register);
+                            add_register(visuals, &mut text_attrs, register);
                         }
                         Command::Output(path) => {
                             text_attrs.colour.insert(
@@ -228,17 +248,17 @@ fn layout_job(
                             );
                         }
                         Command::RawLabel(label) => {
-                            add_label(&mut text_attrs, label);
+                            add_label(visuals, &mut text_attrs, label);
                         }
                         Command::Alloc(const_expr) => {
-                            add_constant_expression(&mut text_attrs, const_expr);
+                            add_constant_expression(visuals, &mut text_attrs, const_expr);
                         }
                         _ => {}
                     },
                     Line::Meta(meta) => match meta {
                         Meta::Label(label) => {
                             text_attrs.italics.insert(*start..label.end, true);
-                            add_label(&mut text_attrs, label);
+                            add_label(visuals, &mut text_attrs, label);
                         }
                         Meta::RomPage(page) => {
                             text_attrs.italics.insert(*start..page.end, true);
@@ -257,8 +277,8 @@ fn layout_job(
                         }
                         Meta::Constant(label, value) => {
                             text_attrs.italics.insert(*start..*end, true);
-                            add_label(&mut text_attrs, label);
-                            add_value(&mut text_attrs, value);
+                            add_label(visuals, &mut text_attrs, label);
+                            add_value(visuals, &mut text_attrs, value);
                         }
                     },
                 }

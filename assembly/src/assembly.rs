@@ -46,6 +46,9 @@ pub enum Condition {
 pub enum ConstantExpression {
     Immediate(WithPos<Option<u16>>), // None if out of range
     Variable(WithPos<Label>),
+    Add(Box<WithPos<ConstantExpression>>, Box<WithPos<ConstantExpression>>),
+    Sub(Box<WithPos<ConstantExpression>>, Box<WithPos<ConstantExpression>>),
+    Mul(Box<WithPos<ConstantExpression>>, Box<WithPos<ConstantExpression>>),
 }
 
 #[derive(Debug, Clone)]

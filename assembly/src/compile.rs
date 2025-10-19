@@ -608,6 +608,12 @@ fn evaluate_constant_expression(
                 })
             }
         }
+        ConstantExpression::Add(a, b) => Ok(evaluate_constant_expression(&a.t, variables, line)?
+            .wrapping_add(evaluate_constant_expression(&b.t, variables, line)?)),
+        ConstantExpression::Sub(a, b) => Ok(evaluate_constant_expression(&a.t, variables, line)?
+            .wrapping_sub(evaluate_constant_expression(&b.t, variables, line)?)),
+        ConstantExpression::Mul(a, b) => Ok(evaluate_constant_expression(&a.t, variables, line)?
+            .wrapping_mul(evaluate_constant_expression(&b.t, variables, line)?)),
     }
 }
 

@@ -126,8 +126,14 @@ Condition: Condition = {
 }
 
 ConstantExpression: ConstantExpression = {
+    #[precedence(level="0")]
     <value:WithPos<SixteenBitNum>> => ConstantExpression::Immediate(value),
     <lable:Label> => ConstantExpression::Variable(lable),
+    #[precedence(level="1")] #[assoc(side="left")]
+    <a:WithPos<ConstantExpression>> "*" <b:WithPos<ConstantExpression>> => ConstantExpression::Mul(Box::new(a), Box::new(b)),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <a:WithPos<ConstantExpression>> "+" <b:WithPos<ConstantExpression>> => ConstantExpression::Add(Box::new(a), Box::new(b)),
+    <a:WithPos<ConstantExpression>> "-" <b:WithPos<ConstantExpression>> => ConstantExpression::Sub(Box::new(a), Box::new(b)),
 }
 
 Line: Line = {
