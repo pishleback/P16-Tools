@@ -26,15 +26,23 @@ pub fn update(
     egui::ScrollArea::vertical()
         .auto_shrink([false, true])
         .stick_to_bottom(false)
-        // .max_height(600.0)
         .show(ui, |ui| {
             static FILES: &[(&str, &str)] = &[
+                (
+                    "Very Simple Program",
+                    include_str!("../../../examples/very_simple.txt"),
+                ),
+                (
+                    "Constant Expressions",
+                    include_str!("../../../examples/constexpr.txt"),
+                ),
                 (
                     "Fibonancii",
                     include_str!("../../../examples/fibonancii.txt"),
                 ),
                 ("Multiply", include_str!("../../../examples/multiply.txt")),
                 ("Ackermann", include_str!("../../../examples/ackermann.txt")),
+                ("Stack", include_str!("../../../examples/stack.txt")),
             ];
 
             let mut selected_file = None;

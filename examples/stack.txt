@@ -1,35 +1,84 @@
+# A stack implementation
+
+# Size of the stack
 .CONST stack_size 100
+# ORed with %F if a stack overflow occurs
+.CONST stack_overflow_error_bit 1
+# ORed with %F if a stack underflow occurs
+.CONST stack_underflow_error_bit 2
 
 ..DATA
-VALUE 65535
+ALLOC 69 # To test that the stack still works even when it does not start at RAM address 0
+VALUE -1 # To mark the boundary before the sack
 .LABEL stack_ptr
-VALUE stack_start
+VALUE stack_start # Point at the top of the stack
 .LABEL stack_start
 ALLOC stack_size
-VALUE 65535
-
-..ROM 0
-.LABEL loop
-VALUE 117
-CALL stack_push
-JUMP loop
-RETURN
+VALUE -1 # To mark the boundary after the sack
 
 ..ROM F
 # (value) -> ()
-.LABEL stack_push # (value)
+.LABEL stack_push
 POP %0
 VALUE stack_ptr
 KREAD
 POP %1
+VALUE stack_start + stack_size
+POP %3
 INPUT
+CMP %3
+.USEFLAGS
+BRANCH EQ stack_push_stack_overflow
 KWRITE %0
 INC
 POP %2
 PUSH %1
 PWRITE %2
 RETURN
+.LABEL stack_push_stack_overflow
+PSETF
+VALUE stack_overflow_error_bit
+OR %F
+POP %F
+RETURN
 
 # () -> (value)
 .LABEL stack_pop
+VALUE stack_ptr
+KREAD
+POP %1
+VALUE stack_start
+POP %3
+INPUT
+CMP %3
+.USEFLAGS
+DEC
+BRANCH EQ stack_push_stack_underflow
+KREAD
+POP %0
+PUSH %1
+PWRITE %0
+INPUT
+RETURN
+
+.LABEL stack_push_stack_underflow
+PSETF
+VALUE stack_underflow_error_bit
+OR %F
+POP %F
+RETURN
+
+# End of stack implementation
+
+
+# Example usage
+..ROM 0
+VALUE 1 CALL stack_push
+VALUE 2 CALL stack_push
+CALL stack_pop
+VALUE 3 CALL stack_push
+VALUE 4 CALL stack_push
+CALL stack_pop
+CALL stack_pop
+CALL stack_pop
 RETURN

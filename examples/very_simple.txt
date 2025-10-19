@@ -1,0 +1,9 @@
+# A very simple program
+# Execution always starts in ROM page 0
+
+..ROM 0
+# Push 69 onto the stack
+VALUE 69
+# Pop 69 from the stack into register 0
+POP %0
+RETURN

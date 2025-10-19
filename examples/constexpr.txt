@@ -1,0 +1,9 @@
+# Constant expression demo
+
+.CONST a 2
+.CONST b 3
+
+..DATA
+VALUE a + b + c  # RAM address 0 is set to 2+3+1=6
+.LABEL c  # c=1 since this is the address of this label in RAM
+VALUE -1 # A value at address 1 in RAM
