@@ -371,6 +371,7 @@ impl Simulator {
                     Some(ptr) => {
                         self.program_counter = ptr;
                         self.load_pache();
+                        self.flush_flag_delay();
                     }
                     None => {
                         return Ok(EndStepOkState::Finish);
