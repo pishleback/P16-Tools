@@ -512,9 +512,9 @@ fn layout_job(
     }
 
     let mut job = LayoutJob::default();
-    for i in 0..text.len() {
+    for (i, c) in text.char_indices() {
         job.append(
-            &text[i..i + 1],
+            &text[i..i + c.len_utf8()],
             0.0,
             TextFormat {
                 color: *text_attrs.colour.get(i).unwrap_or(&visuals.text_color()),
