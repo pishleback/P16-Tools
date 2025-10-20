@@ -1,17 +1,8 @@
 # Can be at most 2^15 since 1 bit is used to flag blocks as free or allocated
-.CONST heap_size 7
+.CONST heap_size 11
 # ORed with %F if new is called and there is no enough space to allocate.
-.CONST heap_out_of_memory 1
+.CONST heap_out_of_memory 4
 
-..DATA
-ALLOC 2
-VALUE -1
-.LABEL heap_ptr
-VALUE heap_start
-.LABEL heap_start
-VALUE heap_size - 1
-ALLOC heap_size - 1
-VALUE -1
 
 # # heap invariants:
 # The heap is a value `heap_ptr` in RAM followed by the heap memory of size `heap_size - 1`.
@@ -20,48 +11,175 @@ VALUE -1
 # A block begins with a metadata value. The least-sig 15 bits are equal to one less than the length of the block i.e. equal to the space available for use withinthe block. The top-most bit is 0 if the block is free and 1 if the block is allocated.
 # The heap pointer always points to the start of a block.
 
+# Heap data
+..DATA
+ALLOC 1
+VALUE -1
+.LABEL heap_ptr
+VALUE heap_start
+.LABEL heap_start
+VALUE heap_size - 1 ALLOC heap_size - 1
+VALUE -1
+
+# Heap function calls
 ..ROM 1
-# (size) -> (addr)
+
+# Public
+# Inputs:
+# - Top of stack is the size of block to reserve
+# Outputs:
+# - Top of stack is the address of the allocated block
+# Registers:
+# - Uses %0 to %9
 .LABEL heap_new
 POP %0 # size to allocate
 VALUE heap_ptr
-PREAD
-INPUT
-DUP
-POP %1 # heap_ptr
-POP %4 # initial heap_ptr
-.LABEL heap_new_try_block
-PUSH %1 PREAD INPUT # read at heap_ptr
-POP %2 # block metadata
-VALUE 32768 DUP NOT # metadata mask
-AND %2
-POP %3 # size of block
-AND %2
-.USEFLAGS # zero iff block is free
+KREAD
+DUP POP %2 # address of heap_ptr
+VALUE heap_size POP %7 #size of the heap
+ADD %7 INC POP %5 # just after end of heap
+VALUE 32768 POP %6 # metadata mask
+VALUE 0
+POP %4 # Keep track of how much memory we've search for the purpose of out of memory detection
+INPUT # Top of stack points at next block
+POP %1 # Point at next block
+.LABEL heap_new_loop
+PUSH %4 CMP %7 .USEFLAGS PSETF BRANCH HS heap_new_out_of_memory
+# %1 should point at the next block to try
+PUSH %1
+CALL heap_new_read_block_metadata # Top of stack is size of the block
+.USEFLAGS
+BRANCH Z heap_new_jump_free
+# An allocated block.
+CALL heap_new_update_size_tracker
+CALL heap_next_block
+JUMP heap_new_loop
+.LABEL heap_new_jump_free
+# A free block starting at %1 and the size on the top of the stack.
+CMP %0 .USEFLAGS  # Is it big enough?
+BRANCH HI heap_new_alloc_smaller # Yes, and there is non-zero space left over
+BRANCH EQ heap_new_alloc_exact # Yes, it's exactly the right size
+# It is not big enough
+PUSH %1 POP %3 # Remember the start of the first free block in %3
+DUP POP %9 # Remember the size of the first free block in %9
+CALL heap_next_block
+.USEFLAGS
+BRANCH !Z heap_new_did_not_wrap
+# We wrapped so need to start again.
+PUSH %9
+CALL heap_new_update_size_tracker
 PSETF
-# If the block is allocated then we want to try the next block
-BRANCH !Z heap_new_unsuitable_block
-# It's a free block. Is it big enough? If not, are there more free blocks after this one which add up to enough space? Whatever the case, merge the series of free blocks into a single free block.
-# TODO
-.LABEL heap_new_unsuitable_block
-# Proceed heap_ptr to the next block. Wrap around if and the end of the heap memory. Out of memory if the next heap pointer is equal to the initial heap pointer.
-# TODO
-JUMP heap_new_try_block
-.LABEL heap_new_suitable_block
-# We have a free block which is big enough. Modify the existing metadata to mark a new allocated block of the requested size.
-# If not using the entire block then we must mark the end as free.
-# TODO
+JUMP heap_new_loop
+.LABEL heap_new_did_not_wrap
+# Did not wrap. Is the next block a free block?
+PUSH %1
+CALL heap_new_read_block_metadata
+BRANCH Z heap_new_next_is_free
+# The next block is allocated. Skip it and continue looking for free blocks after it.
+CALL heap_new_update_size_tracker
+CALL heap_next_block
+JUMP heap_new_loop
+.LABEL heap_new_next_is_free
+# The next block is free. Merge it with the previous free block.
+INC ADD %9 POP %9 PUSH %3 PWRITE %9 
+PUSH %3 POP %1 PUSH %9 # Put the start of the previous block back in %1 and the new length at the top of the stack
+JUMP heap_new_jump_free
+
+# Inputs
+# - Start of free block in %1
+# - Size of free block at top of stack
+# - Free block is strictly larger than the requested size in %0
+# Outputs
+# - Mark the first part of the block as allocated and mark the unallocated part as a new free block
+# - Pointer to start of contents of allocated block on the stack
+.LABEL heap_new_alloc_smaller
+SUB %0 DEC POP %4 #Size of free block
+PUSH %1 INC ADD %0 # Start of free block
+PWRITE %4
+PUSH %0
+JUMP heap_new_alloc_exact
+
+# Inputs
+# - Start of free block in %1
+# - Size of free block at top of stack
+# - Mark the block as allocated
+# Outputs
+# - Pointer to start of contents of new allocated block on the stack
+.LABEL heap_new_alloc_exact
+OR %6 POP %4 PUSH %1 KWRITE %4 INC
 RETURN
 
-# (addr)
+# Add one more than the top of the stack to %4
+# To keep track of how much of the heap we've searched for  the purposes of out of memory detection
+.LABEL heap_new_update_size_tracker
+DUP INC ADD %4 POP %4 # Add the size of the block to %4
+RETURN
+
+# Inputs
+# - Current heap pointer in %1
+# - Size of block at top of stack
+# Outputs
+# - Empty the stack
+# - Add the current block size to %4.
+# - Modify %1 to point at the next block, wrapping if necessary.
+# - Set ALU flag Z to 1 if we wrapped and 0 if we did not wrap
+.LABEL heap_next_block
+ADD %1 INC # Next block pointer at top of stack
+CMP %5 .USEFLAGS BRANCH NE heap_no_wrap # Check if we need to wrap
+PSETF PUSH %2 INC POP %1 # Set %1 to the start of the heap
+PUSH %6 XOR %6 PSETF # Set ALU flag Z to 1
+RETURN
+.LABEL heap_no_wrap
+POP %1
+PUSH %6 PSETF # Set ALU flag Z to 0
+RETURN
+
+# Inputs: 
+# - Top of stack is ptr to start of block
+# Otuputs: 
+# - Top of stack is size of block
+# - ALU zero flag is set iff block is free
+.LABEL heap_new_read_block_metadata
+PREAD INPUT POP %8 # Read block metadata into %8
+PUSH %6 NOT # metadata mask
+AND %8 # To be returned
+PUSH %6 AND %8 PSETF # Set flags according to whether the block is free or allocated
+RETURN
+
+.LABEL heap_new_out_of_memory
+# Split it up since we're out of memory
+CALL heap_new_out_of_memory_impl
+RETURN
+
+..ROM 2
+.LABEL heap_new_out_of_memory_impl
+VALUE heap_out_of_memory OR %F POP %F
+VALUE 0
+RETURN
+
+# Public
+# Inputs:
+# - Address of the block to delete
+# Outputs:
+# - Nothing
+# Registers:
+# - Uses %0 only
+# May only be called once on addresses previously returned by heap_new
 .LABEL heap_delete
-# Mark the block starting at addr as free.
-# TODO
+# Mark the block starting at addr as free by unsetting the top bit
+DEC KREAD INPUT DUP POP %0 ADD %0 RSH POP %0 PWRITE %0
 RETURN
 
-# End of heap implementation
 
+# Example usage
 ..ROM 0
-VALUE 3
-CALL heap_new
+VALUE 3 CALL heap_new POP %A
+VALUE 3 CALL heap_new POP %B
+VALUE 2 CALL heap_new POP %C
+PUSH %B CALL heap_delete
+VALUE 1 CALL heap_new POP %D
+PUSH %A CALL heap_delete
+PUSH %C CALL heap_delete
+PUSH %D CALL heap_delete
+VALUE 10 CALL heap_new POP %E
 RETURN

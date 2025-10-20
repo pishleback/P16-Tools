@@ -43,6 +43,7 @@ pub fn update(
                 ("Multiply", include_str!("../../../examples/multiply.txt")),
                 ("Ackermann", include_str!("../../../examples/ackermann.txt")),
                 ("Stack", include_str!("../../../examples/stack.txt")),
+                ("Heap", include_str!("../../../examples/heap.txt")),
             ];
 
             let mut selected_file = None;
