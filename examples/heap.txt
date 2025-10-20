@@ -22,8 +22,7 @@ VALUE heap_size - 1 ALLOC heap_size - 1
 VALUE -1
 
 # Heap function calls
-..ROM 1
-
+..ROM 2
 # Public
 # Inputs:
 # - Top of stack is the size of block to reserve
@@ -43,6 +42,11 @@ VALUE 0
 POP %4 # Keep track of how much memory we've search for the purpose of out of memory detection
 INPUT # Top of stack points at next block
 POP %1 # Point at next block
+CALL heap_new_impl
+RETURN
+
+..ROM 1
+.LABEL heap_new_impl
 .LABEL heap_new_loop
 PUSH %4 CMP %7 .USEFLAGS PSETF BRANCH HS heap_new_out_of_memory
 # %1 should point at the next block to try
@@ -57,10 +61,10 @@ JUMP heap_new_loop
 .LABEL heap_new_jump_free
 # A free block starting at %1 and the size on the top of the stack.
 CMP %0 .USEFLAGS  # Is it big enough?
+PUSH %1 POP %3 # Remember the start of the first free block in %3
 BRANCH HI heap_new_alloc_smaller # Yes, and there is non-zero space left over
 BRANCH EQ heap_new_alloc_exact # Yes, it's exactly the right size
 # It is not big enough
-PUSH %1 POP %3 # Remember the start of the first free block in %3
 DUP POP %9 # Remember the size of the first free block in %9
 CALL heap_next_block
 .USEFLAGS
@@ -86,7 +90,7 @@ PUSH %3 POP %1 PUSH %9 # Put the start of the previous block back in %1 and the 
 JUMP heap_new_jump_free
 
 # Inputs
-# - Start of free block in %1
+# - Start of free block in %1 and %3
 # - Size of free block at top of stack
 # - Free block is strictly larger than the requested size in %0
 # Outputs
@@ -100,13 +104,14 @@ PUSH %0
 JUMP heap_new_alloc_exact
 
 # Inputs
-# - Start of free block in %1
+# - Start of free block in %1 and %3
 # - Size of free block at top of stack
 # - Mark the block as allocated
 # Outputs
 # - Pointer to start of contents of new allocated block on the stack
 .LABEL heap_new_alloc_exact
-OR %6 POP %4 PUSH %1 KWRITE %4 INC
+DUP CALL heap_next_block PUSH %2 PWRITE %1
+OR %6 POP %4 PUSH %3 KWRITE %4 INC
 RETURN
 
 # Add one more than the top of the stack to %4
@@ -148,15 +153,11 @@ RETURN
 
 .LABEL heap_new_out_of_memory
 # Split it up since we're out of memory
-CALL heap_new_out_of_memory_impl
-RETURN
-
-..ROM 2
-.LABEL heap_new_out_of_memory_impl
 VALUE heap_out_of_memory OR %F POP %F
 VALUE 0
 RETURN
 
+..ROM 1
 # Public
 # Inputs:
 # - Address of the block to delete
