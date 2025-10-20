@@ -16,6 +16,14 @@ VALUE stack_start # Point at the top of the stack
 ALLOC stack_size
 VALUE -1 # To mark the boundary after the sack
 
+# Public
+# Inputs:
+# - The value to push at the top of the stack
+# Outputs:
+# - Empty stack
+# Registers:
+# - Uses %0 to %3
+# - Sets error bits in %F
 ..ROM 1
 # (value) -> ()
 .LABEL stack_push
@@ -42,15 +50,22 @@ OR %F
 POP %F
 RETURN
 
-# () -> (value)
+# Public
+# Inputs:
+# - Nothing
+# Outputs:
+# - Popped value at the top of the stack
+# Registers:
+# - Uses %0 %1 %2
+# - Sets error bits in %F
 .LABEL stack_pop
 VALUE stack_ptr
 KREAD
 POP %1
 VALUE stack_start
-POP %3
+POP %2
 INPUT
-CMP %3
+CMP %2
 .USEFLAGS
 DEC
 BRANCH EQ stack_push_stack_underflow
@@ -67,8 +82,6 @@ VALUE stack_underflow_error_bit
 OR %F
 POP %F
 RETURN
-
-# End of stack implementation
 
 
 # Example usage
