@@ -432,10 +432,12 @@ impl<'a> MemoryPageManager<'a> {
             .collect();
     }
     // overwrite the current flags out of the ALU
-    fn set_flags(&mut self, line: usize) {
+    fn set_flags(&mut self, line: usize) -> Result<(), CompileError>{
+        self.check_is_full()?;
         self.flags_as_set = FlagsState {
             sources: vec![(self.ptr.unwrap(), line)],
-        }
+        };
+        Ok(())
     }
     // populate the flag queue with flags which could also be set here
     fn set_possible_flushed_flags(&mut self, line: usize) -> Result<(), CompileError> {
@@ -1036,7 +1038,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(7)?;
                                 }
                                 crate::assembly::Command::Add(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(8)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
@@ -1050,7 +1052,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(0)?;
                                 }
                                 crate::assembly::Command::Not => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(1)?;
                                 }
@@ -1063,62 +1065,62 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(3)?;
                                 }
                                 crate::assembly::Command::Increment => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(4)?;
                                 }
                                 crate::assembly::Command::IncrementWithCarry => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(5)?;
                                 }
                                 crate::assembly::Command::Decrement => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(6)?;
                                 }
                                 crate::assembly::Command::DecrementWithCarry => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(7)?;
                                 }
                                 crate::assembly::Command::Negate => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(8)?;
                                 }
                                 crate::assembly::Command::NegateWithCarry => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(9)?;
                                 }
                                 crate::assembly::Command::NoopSetFlags => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(10)?;
                                 }
                                 crate::assembly::Command::PopSetFlags => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(11)?;
                                 }
                                 crate::assembly::Command::RightShift => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(12)?;
                                 }
                                 crate::assembly::Command::RightShiftCarryIn => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(13)?;
                                 }
                                 crate::assembly::Command::RightShiftOneIn => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(14)?;
                                 }
                                 crate::assembly::Command::ArithmeticRightShift => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(10)?;
                                     code.push(15)?;
                                 }
@@ -1128,7 +1130,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Sub(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(1)?;
                                     code.push(nibble.t.as_u8())?;
@@ -1144,73 +1146,73 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::And(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(4)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Nand(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(5)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Or(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(6)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Nor(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(7)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Xor(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(8)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::NXor(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(9)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::RegToFlags(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(10)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::Compare(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(11)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::SwapAdd(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(12)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::SwapSub(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(13)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::AddWithCarry(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(14)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
                                 crate::assembly::Command::SubWithCarry(nibble) => {
-                                    code.set_flags(line.assembly_line_num);
+                                    code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(15)?;
                                     code.push(nibble.t.as_u8())?;
