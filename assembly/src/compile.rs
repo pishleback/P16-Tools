@@ -432,7 +432,7 @@ impl<'a> MemoryPageManager<'a> {
             .collect();
     }
     // overwrite the current flags out of the ALU
-    fn set_flags(&mut self, line: usize) -> Result<(), CompileError>{
+    fn set_flags(&mut self, line: usize) -> Result<(), CompileError> {
         self.check_is_full()?;
         self.flags_as_set = FlagsState {
             sources: vec![(self.ptr.unwrap(), line)],
