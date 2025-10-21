@@ -8,6 +8,7 @@ pub struct SimulatorState {
     prev_time: chrono::DateTime<chrono::Utc>,
     end_state: Option<SimulatorEndState>,
     instructions_to_do: f64,
+    is_at_breakpoint: bool,
 }
 
 impl SimulatorStateTrait for SimulatorState {
@@ -20,6 +21,7 @@ impl SimulatorStateTrait for SimulatorState {
             prev_time: chrono::Utc::now(),
             instructions_to_do: 0.0,
             end_state: None,
+            is_at_breakpoint: false,
         }
     }
 
@@ -35,14 +37,22 @@ impl SimulatorStateTrait for SimulatorState {
         self.end_state
     }
 
-    fn one_step(&mut self) {
+    fn one_step(&mut self, ignore_breakpoints: bool) {
         if self.end_state.is_none() {
-            match self.simulator.step(false) {
+            match self.simulator.step(false, ignore_breakpoints) {
                 Ok(s) => match s {
-                    assembly::EndStepOkState::Continue => {}
-                    assembly::EndStepOkState::WaitingForInput => {}
+                    assembly::EndStepOkState::Continue => {
+                        self.is_at_breakpoint = false;
+                    }
+                    assembly::EndStepOkState::WaitingForInput => {
+                        self.is_at_breakpoint = false;
+                    }
                     assembly::EndStepOkState::Finish => {
+                        self.is_at_breakpoint = false;
                         self.end_state = Some(SimulatorEndState::Halt);
+                    }
+                    assembly::EndStepOkState::BreakPoint => {
+                        self.is_at_breakpoint = true;
                     }
                 },
                 Err(e) => {
@@ -57,12 +67,16 @@ impl SimulatorStateTrait for SimulatorState {
         self.instructions_to_do +=
             self.instructions_per_second * (start_time - self.prev_time).as_seconds_f64();
         while chrono::Utc::now() - start_time < max_time && self.instructions_to_do > 1.0 {
-            self.one_step();
+            self.one_step(false);
             self.instructions_to_do -= 1.0;
         }
         println!("{:?}", self.instructions_to_do);
         self.instructions_to_do = self.instructions_to_do.clamp(0.0, 1.0);
         self.prev_time = start_time;
+    }
+
+    fn is_at_breakpoint(&self) -> bool {
+        self.is_at_breakpoint
     }
 
     fn get_reg(&self, nibble: Nibble) -> u16 {

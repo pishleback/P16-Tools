@@ -1,10 +1,10 @@
 use crate::{
     assembly::{Assembly, ConstantExpression, Label, Line, Meta},
-    WithPos, RAM_SIZE_NIBBLES,
+    ProgramPtr, WithPos, RAM_SIZE_NIBBLES,
 };
 use crate::{datatypes::Nibble, ProgramMemory};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     hash::Hash,
 };
 
@@ -760,8 +760,8 @@ pub struct CompiledLine {
     pub line: WithPos<Line>,
     pub assembly_line_num: usize, //the index of the line in the assembly (not the same as line #)
     // where in the program page does it appear
-    pub page_start: usize,
-    pub page_end: usize,
+    pub page_start: Option<u8>, // None if at the end of the page
+    pub page_end: Option<u8>,   // None if at the end of the page
 }
 
 // The location in RAM of a ..RAM page
@@ -779,6 +779,7 @@ pub struct CompileSuccess {
     ram_lines: Vec<Vec<CompiledLine>>, // outer vec bijects with the ..RAM pages
     useflag_lines: HashMap<usize, Vec<usize>>, // point from .USEFLAG lines to the line whose flags it could be using
     branch_lines: HashMap<usize, usize>,       // point from BRANCH to the .USEFLAG line it is using
+    ram_ident_to_addr: HashMap<usize, u16>,
 }
 
 impl CompileSuccess {
@@ -796,6 +797,35 @@ impl CompileSuccess {
 
     pub fn ram_lines(&self, ident: usize) -> &Vec<CompiledLine> {
         &self.ram_lines[ident]
+    }
+
+    pub fn breakpoints(&self) -> HashSet<ProgramPtr> {
+        let mut breakpoints = HashSet::new();
+        for i in 0u8..16 {
+            for line in &self.rom_lines[i as usize] {
+                if let Line::Meta(Meta::BreakPoint) = line.line.t {
+                    breakpoints.insert(ProgramPtr {
+                        page: crate::ProgramPagePtr::Rom {
+                            page: Nibble::new(i).unwrap(),
+                        },
+                        counter: line.page_start.unwrap(),
+                    });
+                }
+            }
+        }
+        for (ram_page_ident, ram_page) in self.ram_lines.iter().enumerate() {
+            let addr = *self.ram_ident_to_addr.get(&ram_page_ident).unwrap();
+            for line in ram_page {
+                if let Line::Meta(Meta::BreakPoint) = line.line.t {
+                    breakpoints.insert(ProgramPtr {
+                        page: crate::ProgramPagePtr::Ram { addr },
+                        counter: line.page_start.unwrap(),
+                    });
+                }
+            }
+        }
+
+        breakpoints
     }
 
     pub fn flag_setters_from_useflag(&self, useflag_line: usize) -> Option<Vec<usize>> {
@@ -878,7 +908,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                 let mut useflag_saved_flag_state: Option<(FlagsState, usize)> = None; // (place where flags were set, assembly line of .USEFLAGS)
                 let mut page_lines = vec![];
                 for line in lines {
-                    let start = code.ptr.map(|p| p as usize).unwrap_or(256);
+                    let start = code.ptr;
 
                     match line.line.t.clone() {
                         Line::Command(command) => {
@@ -1265,10 +1295,13 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                 );
                             }
                             Meta::Constant(_, _) => {}
+                            Meta::BreakPoint => {
+                                code.check_is_full()?;
+                            }
                         },
                     }
 
-                    let end = code.ptr.map(|p| p as usize).unwrap_or(256);
+                    let end = code.ptr;
                     page_lines.push(CompiledLine {
                         assembly_line_num: line.assembly_line_num,
                         line: line.line,
@@ -1335,7 +1368,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                             Meta::Label(label) => {
                                 code.label_ram_address(label, line)?;
                             }
-                            Meta::UseFlags => {
+                            Meta::UseFlags | Meta::BreakPoint => {
                                 return Err(CompileError::InvalidCommandLocation {
                                     line: line.assembly_line_num,
                                 });
@@ -1348,6 +1381,8 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
         }
     }
 
+    let ram_ident_to_addr = code.ram_ident_to_addr.clone();
+
     let memory = code.finish()?;
     let program_memory = memory.finish();
 
@@ -1358,5 +1393,6 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
         ram_lines,
         useflag_lines,
         branch_lines,
+        ram_ident_to_addr,
     })
 }

@@ -1,6 +1,6 @@
 use assembly::{compile_assembly, layout_pages, load_assembly};
 use clap::Parser;
-use std::{thread::sleep, time::Duration};
+use std::{collections::HashSet, thread::sleep, time::Duration};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -63,7 +63,7 @@ fn main() {
     }
 
     if args.simulate {
-        let mut sim = memory.simulator();
+        let mut sim = memory.simulator(HashSet::new());
 
         let output = sim.output_queue();
         std::thread::spawn(move || loop {

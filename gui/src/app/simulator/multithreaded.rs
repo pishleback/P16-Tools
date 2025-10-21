@@ -9,6 +9,8 @@ pub struct SimulatorState {
     simulator: Arc<Mutex<Simulator>>,
     instructions_per_second: Arc<Mutex<f64>>,
     instructions_to_do: Arc<Mutex<f64>>,
+    breakpoints_to_skip: Arc<Mutex<usize>>,
+    is_at_breakpoint: Arc<Mutex<bool>>,
 
     stop: Arc<Mutex<bool>>,
     run_thread: Option<JoinHandle<SimulatorEndState>>,
@@ -29,10 +31,14 @@ impl SimulatorStateTrait for SimulatorState {
         let stop = Arc::new(Mutex::new(false));
         let instructions_per_second = Arc::new(Mutex::new(instructions_per_second));
         let instructions_to_do = Arc::new(Mutex::new(0.0));
+        let breakpoints_to_skip = Arc::new(Mutex::new(0));
+        let is_at_breakpoint = Arc::new(Mutex::new(false));
         Self {
             simulator: simulator.clone(),
             instructions_per_second: instructions_per_second.clone(),
             instructions_to_do: instructions_to_do.clone(),
+            breakpoints_to_skip: breakpoints_to_skip.clone(),
+            is_at_breakpoint: is_at_breakpoint.clone(),
             stop: stop.clone(),
             run_thread: Some(spawn(move || {
                 let mut prev_time = std::time::SystemTime::now();
@@ -64,15 +70,32 @@ impl SimulatorStateTrait for SimulatorState {
                             break;
                         }
 
-                        let step_result = simulator.lock().unwrap().step(false);
+                        let ignore_breakpoints = {
+                            let mut breakpoints_to_skip = breakpoints_to_skip.lock().unwrap();
+                            if *breakpoints_to_skip >= 1 {
+                                *breakpoints_to_skip -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        };
+
+                        let step_result = simulator.lock().unwrap().step(false, ignore_breakpoints);
                         match step_result {
                             Ok(state) => match state {
-                                assembly::EndStepOkState::Continue => {}
+                                assembly::EndStepOkState::Continue => {
+                                    *is_at_breakpoint.lock().unwrap() = false;
+                                }
                                 assembly::EndStepOkState::WaitingForInput => {
+                                    *is_at_breakpoint.lock().unwrap() = false;
                                     std::thread::sleep(std::time::Duration::from_millis(100));
                                 }
                                 assembly::EndStepOkState::Finish => {
+                                    *is_at_breakpoint.lock().unwrap() = false;
                                     return SimulatorEndState::Halt;
+                                }
+                                assembly::EndStepOkState::BreakPoint => {
+                                    *is_at_breakpoint.lock().unwrap() = true;
                                 }
                             },
                             Err(e) => {
@@ -108,12 +131,19 @@ impl SimulatorStateTrait for SimulatorState {
         self.run_result
     }
 
-    fn one_step(&mut self) {
+    fn one_step(&mut self, ignore_breakpoints: bool) {
+        if ignore_breakpoints {
+            *self.breakpoints_to_skip.lock().unwrap() += 1;
+        }
         *self.instructions_to_do.lock().unwrap() += 1.0;
     }
 
     fn process(&mut self, _max_time: chrono::TimeDelta) {
         // Everything is done in another thread
+    }
+
+    fn is_at_breakpoint(&self) -> bool {
+        *self.is_at_breakpoint.lock().unwrap()
     }
 
     fn get_reg(&self, nibble: Nibble) -> u16 {

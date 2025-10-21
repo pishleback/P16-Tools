@@ -280,13 +280,7 @@ fn layout_job(
                                 .colour
                                 .insert(page.start..page.end, visuals.strong_text_color());
                         }
-                        Meta::RamPage => {
-                            text_attrs.italics.insert(*start..*end, true);
-                        }
-                        Meta::Data => {
-                            text_attrs.italics.insert(*start..*end, true);
-                        }
-                        Meta::UseFlags => {
+                        Meta::RamPage | Meta::Data | Meta::UseFlags | Meta::BreakPoint => {
                             text_attrs.italics.insert(*start..*end, true);
                         }
                         Meta::Constant(label, value) => {

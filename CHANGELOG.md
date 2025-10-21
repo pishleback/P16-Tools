@@ -1,5 +1,6 @@
-# v1.0
-First tagged version.
+# WIP
+Instruction changes:
+ - Added `.BREAK` command for breakpoints.
 
 # v2.0
 Hardware changes:
@@ -13,3 +14,6 @@ Instruction changes:
  - Replaced `KSETF` (set flags according to the top of the stack) with `DEL` (pop from stack and don't write to a register or set the flags).
  - Replaced `SETF` (set the flags according to a register) with `SETFLAGS` (set the flags according to the nibble in the register argument).
  - Rename `PSETF` to `POPNOOP`.
+
+# v1.0
+First tagged version.

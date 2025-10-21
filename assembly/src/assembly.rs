@@ -46,9 +46,18 @@ pub enum Condition {
 pub enum ConstantExpression {
     Immediate(WithPos<Option<u16>>), // None if out of range
     Variable(WithPos<Label>),
-    Add(Box<WithPos<ConstantExpression>>, Box<WithPos<ConstantExpression>>),
-    Sub(Box<WithPos<ConstantExpression>>, Box<WithPos<ConstantExpression>>),
-    Mul(Box<WithPos<ConstantExpression>>, Box<WithPos<ConstantExpression>>),
+    Add(
+        Box<WithPos<ConstantExpression>>,
+        Box<WithPos<ConstantExpression>>,
+    ),
+    Sub(
+        Box<WithPos<ConstantExpression>>,
+        Box<WithPos<ConstantExpression>>,
+    ),
+    Mul(
+        Box<WithPos<ConstantExpression>>,
+        Box<WithPos<ConstantExpression>>,
+    ),
 }
 
 #[derive(Debug, Clone)]
@@ -120,6 +129,7 @@ pub enum Meta {
     Label(WithPos<Label>),
     UseFlags,
     Constant(WithPos<Label>, WithPos<Option<u16>>), // None if out of range
+    BreakPoint,
 }
 
 #[derive(Debug, Clone)]

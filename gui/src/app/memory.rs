@@ -225,7 +225,9 @@ fn page(
                 i += 1;
                 no_space = false;
 
-                for i in *page_start..*page_end {
+                for i in page_start.map(|p| p as usize).unwrap_or(256)
+                    ..page_end.map(|p| p as usize).unwrap_or(256)
+                {
                     job.append(
                         &page[i..(i + 1)],
                         0.0,

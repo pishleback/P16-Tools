@@ -1,5 +1,6 @@
 use crate::datatypes::{Nibble, OctDigit};
 use crate::memory::ProgramMemory;
+use std::collections::HashSet;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -11,8 +12,8 @@ pub enum EndErrorState {
 }
 
 impl ProgramMemory {
-    pub fn simulator(self) -> Simulator {
-        Simulator::new(self)
+    pub fn simulator(self, breakpoints: HashSet<ProgramPtr>) -> Simulator {
+        Simulator::new(self, breakpoints)
     }
 
     fn read(&self, ptr: &ProgramPtr) -> Nibble {
@@ -38,13 +39,13 @@ impl ProgramMemory {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProgramPagePtr {
     Rom { page: Nibble },
     Ram { addr: u16 },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ProgramPtr {
     pub page: ProgramPagePtr,
     pub counter: u8,
@@ -93,6 +94,7 @@ fn noop_get_flags(a: u16) -> AluFlags {
 #[derive(Debug, Clone, Copy)]
 pub enum EndStepOkState {
     Continue,
+    BreakPoint,
     WaitingForInput,
     Finish,
 }
@@ -142,10 +144,11 @@ pub struct Simulator {
     flags: AluFlags,
     input_queue: Arc<Mutex<InputQueue>>,
     output_queue: Arc<Mutex<OutputQueue>>,
+    breakpoints: HashSet<ProgramPtr>,
 }
 
 impl Simulator {
-    fn new(memory: ProgramMemory) -> Self {
+    fn new(memory: ProgramMemory, breakpoints: HashSet<ProgramPtr>) -> Self {
         let mut s = Self {
             memory,
             program_counter: ProgramPtr {
@@ -174,6 +177,7 @@ impl Simulator {
             },
             input_queue: Arc::new(Mutex::new(InputQueue::new())),
             output_queue: Arc::new(Mutex::new(OutputQueue::new())),
+            breakpoints,
         };
         s.load_pache();
         s
@@ -251,7 +255,15 @@ impl Simulator {
         self.data_stack.clone()
     }
 
-    pub fn step(&mut self, log_instructions: bool) -> Result<EndStepOkState, EndErrorState> {
+    pub fn step(
+        &mut self,
+        log_instructions: bool,
+        ignore_breakpoints: bool,
+    ) -> Result<EndStepOkState, EndErrorState> {
+        if self.breakpoints.contains(&self.program_counter) && !ignore_breakpoints {
+            return Ok(EndStepOkState::BreakPoint);
+        }
+
         let opcode = self.read_pcache();
         match opcode {
             Nibble::N0 => {
@@ -819,7 +831,7 @@ impl Simulator {
 
     pub fn run(&mut self, log_instructions: bool, log_state: bool) -> Result<(), EndErrorState> {
         loop {
-            let result = self.step(log_instructions)?;
+            let result = self.step(log_instructions, true)?;
 
             match result {
                 EndStepOkState::Continue | EndStepOkState::Finish => {
@@ -850,6 +862,7 @@ impl Simulator {
                     }
                 }
                 EndStepOkState::WaitingForInput => {}
+                EndStepOkState::BreakPoint => unreachable!(),
             }
 
             match result {
@@ -860,6 +873,7 @@ impl Simulator {
                 EndStepOkState::WaitingForInput => {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
+                EndStepOkState::BreakPoint => unreachable!(),
             }
         }
         Ok(())

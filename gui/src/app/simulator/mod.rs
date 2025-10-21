@@ -20,9 +20,11 @@ pub trait SimulatorStateTrait {
     fn set_instructions_per_second(&mut self, instructions_per_second: f64);
     fn get_instructions_per_second(&mut self) -> f64;
     fn end_state(&mut self) -> Option<SimulatorEndState>;
-    fn one_step(&mut self);
+    fn one_step(&mut self, ignore_breakpoints: bool);
 
     fn process(&mut self, max_time: chrono::TimeDelta);
+
+    fn is_at_breakpoint(&self) -> bool;
 
     fn get_reg(&self, nibble: Nibble) -> u16;
     fn get_pc(&self) -> ProgramPtr;
@@ -61,13 +63,12 @@ impl<SimulatorState: SimulatorStateTrait> State<SimulatorState> {
     }
 
     pub fn reload_simulator(&mut self) {
-        let memory = full_compile(&self.source)
+        let compile_success = full_compile(&self.source)
             .ok()
-            .and_then(|inner| inner.0.ok().and_then(|inner| inner.0.ok()))
-            .map(|compile_success| compile_success.memory().clone());
-        self.simulator = memory.map(|m| {
+            .and_then(|inner| inner.0.ok().and_then(|inner| inner.0.ok()));
+        self.simulator = compile_success.map(|compiled| {
             SimulatorState::new(
-                m.simulator(),
+                compiled.memory().clone().simulator(compiled.breakpoints()),
                 Self::instructions_per_second_from_sim_speed_slider(self.sim_speed_slider),
             )
         });
@@ -133,7 +134,12 @@ pub fn update<SimulatorState: SimulatorStateTrait>(
                         if simulator.get_instructions_per_second() == 0.0 {
                             ui.label("Paused");
                             if ui.button("Step").clicked() {
-                                simulator.one_step();
+                                simulator.one_step(false);
+                            }
+                        } else if simulator.is_at_breakpoint() {
+                            ui.label("Break Point");
+                            if ui.button("Continue").clicked() {
+                                simulator.one_step(true);
                             }
                         } else {
                             ui.label("Running");

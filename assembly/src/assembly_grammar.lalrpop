@@ -197,6 +197,7 @@ Line: Line = {
     ".LABEL" <l:Label> => Line::Meta(Meta::Label(l)),
     ".USEFLAGS" => Line::Meta(Meta::UseFlags),
     ".CONST" <l:Label> <v:WithPos<SixteenBitNum>> => Line::Meta(Meta::Constant(l, v)),
+    ".BREAK" => Line::Meta(Meta::BreakPoint),
 };
 
 pub Assembly: Assembly = {
