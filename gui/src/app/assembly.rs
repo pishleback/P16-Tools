@@ -216,13 +216,18 @@ fn layout_job(
                         | Command::Nor(register)
                         | Command::Xor(register)
                         | Command::NXor(register)
-                        | Command::RegToFlags(register)
                         | Command::Compare(register)
                         | Command::SwapAdd(register)
                         | Command::SwapSub(register)
                         | Command::AddWithCarry(register)
                         | Command::SubWithCarry(register) => {
                             add_register(visuals, &mut text_attrs, register);
+                        }
+                        Command::SetFlags(nibble) => {
+                            text_attrs.colour.insert(
+                                nibble.start..nibble.end,
+                                visuals.text_color().lerp_to_gamma(Color32::ORANGE, 0.5),
+                            );
                         }
                         Command::Jump(label) => {
                             add_label(visuals, &mut text_attrs, label);

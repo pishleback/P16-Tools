@@ -44,7 +44,7 @@ PUSH %1
 PWRITE %2
 RETURN
 .LABEL stack_push_stack_overflow
-PSETF
+POPNOOP
 VALUE stack_overflow_error_bit
 OR %F
 POP %F
@@ -77,7 +77,7 @@ INPUT
 RETURN
 
 .LABEL stack_push_stack_underflow
-PSETF
+POPNOOP
 VALUE stack_underflow_error_bit
 OR %F
 POP %F
