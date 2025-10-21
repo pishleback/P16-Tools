@@ -22,6 +22,7 @@ POP %3
 RSH
 .USEFLAGS
 BRANCH !C mul_skip
+# Add
 PUSH %0
 ADD %2
 POP %0
@@ -29,16 +30,18 @@ PUSH %1
 CADD %3
 POP %1
 .LABEL mul_skip
+# Double
 PUSH %2
 ADD %2
 POP %2
 PUSH %3
 CADD %3
 POP %3
-KSETF
+DUP
+POPNOOP
 .USEFLAGS
 BRANCH !Z mul_loop
-PSETF
+POPNOOP
 PUSH %1
 PUSH %0
 OUTPUT 2
