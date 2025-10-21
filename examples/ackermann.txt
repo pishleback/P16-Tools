@@ -20,7 +20,7 @@ RETURN
 # PUSH a PUSH b CALL ack POP s
 .LABEL ack
 POP %0 # b
-KSETF # a
+DUP POPNOOP # a
 .USEFLAGS
 POP %1 # a
 BRANCH !Z case2
@@ -31,7 +31,7 @@ RETURN
 
 # a != 0
 .LABEL case2
-SETF %0 # b
+PUSH %0 POPNOOP # b
 .USEFLAGS
 BRANCH !Z case3 # b != 0
 PUSH %1 # a

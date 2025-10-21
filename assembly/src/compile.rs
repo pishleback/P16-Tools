@@ -1094,8 +1094,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(10)?;
                                     code.push(9)?;
                                 }
-                                crate::assembly::Command::NoopSetFlags => {
-                                    code.set_flags(line.assembly_line_num)?;
+                                crate::assembly::Command::Delete => {
                                     code.push(10)?;
                                     code.push(10)?;
                                 }
@@ -1181,7 +1180,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     code.push(9)?;
                                     code.push(nibble.t.as_u8())?;
                                 }
-                                crate::assembly::Command::RegToFlags(nibble) => {
+                                crate::assembly::Command::SetFlags(nibble) => {
                                     code.set_flags(line.assembly_line_num)?;
                                     code.push(11)?;
                                     code.push(10)?;

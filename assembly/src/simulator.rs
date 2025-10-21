@@ -505,11 +505,9 @@ impl Simulator {
                     }
                     Nibble::N10 => {
                         if log_instructions {
-                            println!("Set Flags Without Pop");
+                            println!("Delete");
                         }
-                        let x = self.pop_data_stack();
-                        self.set_flags(noop_get_flags(x), 2);
-                        self.push_data_stack(x).unwrap();
+                        self.pop_data_stack();
                     }
                     Nibble::N11 => {
                         if log_instructions {
@@ -687,8 +685,16 @@ impl Simulator {
                         if log_instructions {
                             println!("Set Flags");
                         }
-                        let f = noop_get_flags(r);
-                        self.set_flags(f, 3);
+                        let bits = reg.as_u8();
+                        self.set_flags(
+                            AluFlags {
+                                zero: bits & 1 != 0,
+                                negative: bits & 2 != 0,
+                                carry: bits & 4 != 0,
+                                overflow: bits & 8 != 0,
+                            },
+                            3,
+                        );
                     }
                     Nibble::N11 => {
                         if log_instructions {
