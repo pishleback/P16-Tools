@@ -1,7 +1,7 @@
 # v1.0
 First tagged version.
 
-# WIP
+# v2.0
 Removed clear input queue button.
 P16 now clears the input queue whenever it begins running.
 P16 now clears the stack whenever it begins running.
