@@ -88,7 +88,16 @@ pub fn update(
             if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
                 let raw_memory = compiled.memory().clone();
 
-                if ui.button("Save Schematic").clicked() {
+                if ui
+                    .button({
+                        #[cfg(target_arch = "wasm32")]
+                        let s = "Download Schematic";
+                        #[cfg(not(target_arch = "wasm32"))]
+                        let s = "Save Schematic";
+                        s
+                    })
+                    .clicked()
+                {
                     let mut schem = schemgen::Schem::new();
                     for i in 1u8..16 {
                         let i = Nibble::new(i).unwrap();
