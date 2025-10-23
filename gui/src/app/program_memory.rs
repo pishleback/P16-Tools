@@ -7,51 +7,51 @@ use std::collections::HashSet;
 
 #[cfg(target_arch = "wasm32")]
 mod save_schem {
-    use schemgen::Schem;
     use js_sys::Uint8Array;
+    use schemgen::Schem;
     use wasm_bindgen::JsCast;
     use wasm_bindgen::prelude::*;
     use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
 
-    /// Trigger a browser download of arbitrary binary data
+    /// Trigger a browser download of arbitrary binary data, safely
     #[wasm_bindgen]
-    pub fn download_binary_file(filename: &str, bytes: &[u8]) {
-        // Convert the Rust &[u8] slice into a JavaScript Uint8Array
+    pub fn download_binary_file(filename: &str, bytes: &[u8]) -> Result<(), JsValue> {
+        // Get the window and document safely
+        let window: Window = web_sys::window().ok_or("No global window exists")?;
+        let document: Document = window.document().ok_or("No document on window")?;
+
+        // Convert Rust &[u8] slice into a JS Uint8Array
         let uint8_array = Uint8Array::from(bytes);
 
         // Put it into a JS array, as Blob::new_with_u8_array_sequence expects an array of parts
         let parts = js_sys::Array::new();
         parts.push(&uint8_array);
 
-        // Create a binary blob
-        let blob = Blob::new_with_u8_array_sequence_and_options(
-            &parts,
-            BlobPropertyBag::new().type_("application/octet-stream"), // generic binary MIME type
-        )
-        .unwrap();
+        // Create a binary blob with MIME type
+        let mut options = BlobPropertyBag::new();
+        options.set_type("application/octet-stream");
+        let blob = Blob::new_with_u8_array_sequence_and_options(&parts, &options)?;
 
         // Create a temporary object URL for the blob
-        let url = Url::create_object_url_with_blob(&blob).unwrap();
+        let url = Url::create_object_url_with_blob(&blob)?;
 
         // Create an <a> element and click it to trigger download
-        let document = web_sys::window().unwrap().document().unwrap();
         let a = document
-            .create_element("a")
-            .unwrap()
-            .dyn_into::<HtmlAnchorElement>()
-            .unwrap();
-
+            .create_element("a")?
+            .dyn_into::<HtmlAnchorElement>()?;
         a.set_href(&url);
         a.set_download(filename);
         a.click();
 
         // Clean up
-        Url::revoke_object_url(&url).unwrap();
+        Url::revoke_object_url(&url)?;
+
+        Ok(())
     }
 
     pub fn save(schem: Schem) {
         let mut bytes: Vec<u8> = vec![];
-        schem.finish(&mut bytes);
+        schem.finish(&mut bytes).unwrap();
         download_binary_file("p16_program.schem", &bytes);
     }
 }
