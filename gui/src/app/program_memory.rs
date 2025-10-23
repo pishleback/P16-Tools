@@ -11,7 +11,7 @@ mod save_schem {
     use schemgen::Schem;
     use wasm_bindgen::JsCast;
     use wasm_bindgen::prelude::*;
-    use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
+    use web_sys::{Blob, BlobPropertyBag, Document, HtmlAnchorElement, Url, Window};
 
     /// Trigger a browser download of arbitrary binary data
     #[wasm_bindgen]
