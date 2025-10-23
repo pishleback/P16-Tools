@@ -9,9 +9,10 @@ use std::collections::HashSet;
 mod save_schem {
     use schemgen::Schem;
     use js_sys::Uint8Array;
+    use wasm_bindgen::JsCast;
     use wasm_bindgen::prelude::*;
     use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
-    
+
     /// Trigger a browser download of arbitrary binary data
     #[wasm_bindgen]
     fn download_binary_file(filename: &str, bytes: &[u8]) {
