@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 #[cfg(target_arch = "wasm32")]
 mod save_schem {
+    use schemgen::Schem;
     use js_sys::Uint8Array;
     use wasm_bindgen::prelude::*;
     use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
