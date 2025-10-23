@@ -1,5 +1,6 @@
 mod assembly;
-mod memory;
+mod program_memory;
+mod random_access_memory;
 mod simulator;
 mod state;
 

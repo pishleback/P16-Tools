@@ -10,8 +10,8 @@ pub struct State {
     #[serde(skip)]
     pub selected_lines: Option<HashSet<usize>>, // which lines of assembly are highlighted
 
-     #[serde(skip)]
-     pub memory: super::memory::MemoryState,
+    #[serde(skip)]
+    pub memory: super::random_access_memory::MemoryState,
 
     #[cfg(not(target_arch = "wasm32"))]
     #[serde(skip)]
@@ -51,8 +51,12 @@ impl State {
             super::assembly::update(self, &compile_result, ctx, frame, ui);
         });
 
-        egui::Window::new("Memory").show(ctx, |ui| {
-            super::memory::update(self, &compile_result, ctx, frame, ui);
+        egui::Window::new("Program Memory").show(ctx, |ui| {
+            super::program_memory::update(self, &compile_result, ctx, frame, ui);
+        });
+
+        egui::Window::new("Random Access Memory").show(ctx, |ui| {
+            super::random_access_memory::update(self, &compile_result, ctx, frame, ui);
         });
 
         egui::Window::new("Simulator").show(ctx, |ui| {
