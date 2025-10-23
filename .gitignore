@@ -2,6 +2,8 @@
 /redlang/target
 /gui/target
 /gui/dist
+/schemgen/target
+/schemgen/example.schem
 prog.schem
 prog.json
 prog.txt

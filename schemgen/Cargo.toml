@@ -1,0 +1,8 @@
+[package]
+name = "schemgen"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+mcschem = { version = "0.1.1", path = "mcschem" }
+assembly = { path = "../assembly", version = "0.0.1" }
