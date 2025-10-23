@@ -28,7 +28,7 @@ mod save_schem {
         parts.push(&uint8_array);
 
         // Create a binary blob with MIME type
-        let mut options = BlobPropertyBag::new();
+        let options = BlobPropertyBag::new();
         options.set_type("application/octet-stream");
         let blob = Blob::new_with_u8_array_sequence_and_options(&parts, &options)?;
 
@@ -52,7 +52,7 @@ mod save_schem {
     pub fn save(schem: Schem) {
         let mut bytes: Vec<u8> = vec![];
         schem.finish(&mut bytes).unwrap();
-        download_binary_file("p16_program.schem", &bytes);
+        download_binary_file("p16_program.schem", &bytes).unwrap();
     }
 }
 
