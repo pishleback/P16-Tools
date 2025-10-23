@@ -13,10 +13,10 @@ mod save_schem {
     use wasm_bindgen::prelude::*;
     use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
 
-    /// Trigger a browser download of arbitrary binary data, safely
+    /// Trigger a browser download of arbitrary binary data
     #[wasm_bindgen]
     pub fn download_binary_file(filename: &str, bytes: &[u8]) -> Result<(), JsValue> {
-        // Get the window and document safely
+        // Get the window and document
         let window: Window = web_sys::window().ok_or("No global window exists")?;
         let document: Document = window.document().ok_or("No document on window")?;
 
