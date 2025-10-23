@@ -118,10 +118,9 @@ impl Schematic {
     pub fn new(data_version: i32, size_x: u16, size_y: u16, size_z: u16) -> Self {
         Self {
             data_version,
-
             blocks: vec![
                 Block::from_str("minecraft:air").unwrap();
-                (size_x * size_y * size_z) as usize
+                size_x as usize * size_y as usize * size_z as usize
             ],
             block_entities: HashMap::new(),
             size_x,
@@ -216,7 +215,7 @@ impl Schematic {
             "BlockEntities": nbt::NbtList::from(block_entities),
         };
 
-        println!("{schem:#?}");
+        // println!("{schem:#?}");
 
         nbt::io::write_nbt(
             writer,

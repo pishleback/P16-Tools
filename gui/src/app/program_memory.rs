@@ -5,6 +5,71 @@ use assembly::{CompiledLine, FullCompileResult, Nibble};
 use egui::{Color32, TextBuffer, TextFormat, Ui, Visuals, text::LayoutJob};
 use std::collections::HashSet;
 
+#[cfg(target_arch = "wasm32")]
+mod save_schem {
+    use js_sys::Uint8Array;
+    use wasm_bindgen::prelude::*;
+    use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
+    /// Trigger a browser download of arbitrary binary data
+    #[wasm_bindgen]
+    fn download_binary_file(filename: &str, bytes: &[u8]) {
+        // Convert the Rust &[u8] slice into a JavaScript Uint8Array
+        let uint8_array = Uint8Array::from(bytes);
+
+        // Put it into a JS array, as Blob::new_with_u8_array_sequence expects an array of parts
+        let parts = js_sys::Array::new();
+        parts.push(&uint8_array);
+
+        // Create a binary blob
+        let blob = Blob::new_with_u8_array_sequence_and_options(
+            &parts,
+            BlobPropertyBag::new().type_("application/octet-stream"), // generic binary MIME type
+        )
+        .unwrap();
+
+        // Create a temporary object URL for the blob
+        let url = Url::create_object_url_with_blob(&blob).unwrap();
+
+        // Create an <a> element and click it to trigger download
+        let document = web_sys::window().unwrap().document().unwrap();
+        let a = document
+            .create_element("a")
+            .unwrap()
+            .dyn_into::<HtmlAnchorElement>()
+            .unwrap();
+
+        a.set_href(&url);
+        a.set_download(filename);
+        a.click();
+
+        // Clean up
+        Url::revoke_object_url(&url).unwrap();
+    }
+
+    pub fn save(schem: Schem) {
+        let mut bytes: Vec<u8> = vec![];
+        schem.finish(&mut bytes);
+        download_binary_file("p16_program.schem", &bytes);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+mod save_schem {
+    use schemgen::Schem;
+
+    pub fn save(schem: Schem) {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title("Save schematic as...")
+            .save_file()
+        {
+            let mut file = std::fs::File::create(path).unwrap();
+            if let Err(()) = schem.finish(&mut file) {
+                println!("Failed :(");
+            }
+        }
+    }
+}
+
 pub fn update(
     state: &mut State,
     compile_result: &FullCompileResult,
@@ -19,6 +84,15 @@ pub fn update(
         .show(ui, |ui| {
             if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
                 let raw_memory = compiled.memory().clone();
+
+                if ui.button("Save Schematic").clicked() {
+                    let mut schem = schemgen::Schem::new();
+                    for i in 1u8..16 {
+                        let i = Nibble::new(i).unwrap();
+                        schem.place_rom_page(i, raw_memory.rom_page(i));
+                    }
+                    save_schem::save(schem);
+                }
 
                 // Show ROM pages
                 for rom_page in (0..16).map(|n| Nibble::new(n).unwrap()) {

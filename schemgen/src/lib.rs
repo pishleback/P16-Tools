@@ -23,7 +23,8 @@ impl Schem {
         assert!(self.blocks.insert(pos, block).is_none());
     }
 
-    pub fn finish<W: std::io::Write>(self, writer: &mut W) {
+    #[allow(clippy::result_unit_err)]
+    pub fn finish<W: std::io::Write>(self, writer: &mut W) -> Result<(), ()> {
         let min_x = self.blocks.iter().map(|((x, _, _), _)| *x).min().unwrap();
         let max_x = self.blocks.iter().map(|((x, _, _), _)| *x).max().unwrap();
         let size_x = max_x - min_x + 1;
@@ -79,7 +80,7 @@ impl Schem {
         }
         schem
             .export(writer, (min_x as i32, min_y as i32, min_z as i32))
-            .unwrap();
+            .map_err(|_| ())
     }
 }
 
@@ -111,18 +112,22 @@ impl Schem {
         assert_eq!(nibbles.len(), 256);
         for a in 0usize..8 {
             for d in 0usize..32 {
-                self.place(
-                    (ox - 2 * d as i16, oy - 2 * a as i16, oz),
-                    Block::Barrel {
-                        ss: nibbles[d + 32 * a],
-                    },
-                )
+                let pos = (ox - 2 * d as i16, oy - 2 * a as i16, oz);
+                let ss = nibbles[d + 32 * a];
+                if ss == Nibble::N0 {
+                    self.place(
+                        pos,
+                        Block::Plain(PlainBlock::from_str("minecraft:glass").unwrap()),
+                    );
+                } else {
+                    self.place(pos, Block::Barrel { ss });
+                }
             }
         }
     }
 
-    pub fn place_rom_page(&mut self, page: usize, memory: assembly::ProgramPage) {
-        assert!(page < 16);
+    pub fn place_rom_page(&mut self, page: Nibble, memory: &assembly::ProgramPage) {
+        let page = page.as_usize();
         match page {
             0 => {
                 println!("Schematics for ROM page 0 are not supported.");

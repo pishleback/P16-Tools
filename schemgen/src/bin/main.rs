@@ -29,5 +29,5 @@ fn main() {
     );
 
     let mut file = std::fs::File::create("example.schem").unwrap();
-    schem.finish(&mut file);
+    schem.finish(&mut file).unwrap();
 }
