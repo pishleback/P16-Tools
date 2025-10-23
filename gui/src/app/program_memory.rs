@@ -15,7 +15,7 @@ mod save_schem {
 
     /// Trigger a browser download of arbitrary binary data
     #[wasm_bindgen]
-    fn download_binary_file(filename: &str, bytes: &[u8]) {
+    pub fn download_binary_file(filename: &str, bytes: &[u8]) {
         // Convert the Rust &[u8] slice into a JavaScript Uint8Array
         let uint8_array = Uint8Array::from(bytes);
 
