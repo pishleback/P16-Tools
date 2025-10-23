@@ -1,9 +1,10 @@
+pub use assembly::Nibble;
 use mcschem::Block as PlainBlock;
 use std::{collections::HashMap, str::FromStr};
 
 pub enum Block {
     Plain(PlainBlock),
-    Barrel(usize),
+    Barrel { ss: Nibble },
 }
 
 pub struct Schem {
@@ -52,8 +53,8 @@ impl Schem {
                     schem.set_block(x, y, z, block);
                 }
 
-                Block::Barrel(ss) => {
-                    if ss == 0 {
+                Block::Barrel { ss } => {
+                    if ss == Nibble::N0 {
                         schem.set_block(
                             x,
                             y,
@@ -69,7 +70,7 @@ impl Schem {
                             mcschem::Block::from_str("minecraft:barrel[facing=up,open=false]")
                                 .unwrap(),
                             mcschem::BlockEntity::Barrel {
-                                items: mcschem::utils::barrel_ss(ss),
+                                items: mcschem::utils::barrel_ss(ss.as_usize()),
                             },
                         );
                     }
@@ -79,5 +80,67 @@ impl Schem {
         schem
             .export(writer, (min_x as i32, min_y as i32, min_z as i32))
             .unwrap();
+    }
+}
+
+impl Schem {
+    fn make_torch_rom_page(&mut self, ox: i16, oy: i16, oz: i16, nibbles: Vec<Nibble>) {
+        assert_eq!(nibbles.len(), 256);
+        fn set_nibble(schem: &mut Schem, x: i16, y: i16, z: i16, n: Nibble) {
+            for i in 0usize..4 {
+                let dx = -2 * i as i16;
+                let block = if n.as_usize() & (1 << (3 - i)) != 0 {
+                    Block::Plain(
+                        PlainBlock::from_str("minecraft:redstone_wall_torch[facing=north]")
+                            .unwrap(),
+                    )
+                } else {
+                    Block::Plain(PlainBlock::from_str("minecraft:glass").unwrap())
+                };
+                schem.place((x + dx, y, z), block);
+            }
+        }
+
+        for (i, n) in nibbles.iter().enumerate() {
+            let (q, r) = (i / 32, i % 32);
+            set_nibble(self, ox - 8 * q as i16, oy, oz - 2 * r as i16, *n);
+        }
+    }
+
+    fn make_barrel_rom_page(&mut self, ox: i16, oy: i16, oz: i16, nibbles: Vec<Nibble>) {
+        assert_eq!(nibbles.len(), 256);
+        for a in 0usize..8 {
+            for d in 0usize..32 {
+                self.place(
+                    (ox - 2 * d as i16, oy - 2 * a as i16, oz),
+                    Block::Barrel {
+                        ss: nibbles[d + 32 * a],
+                    },
+                )
+            }
+        }
+    }
+
+    pub fn place_rom_page(&mut self, page: usize, memory: assembly::ProgramPage) {
+        assert!(page < 16);
+        match page {
+            0 => {
+                println!("Schematics for ROM page 0 are not supported.");
+            }
+            1..=3 => {
+                self.make_torch_rom_page(-5, -10 - 5 * (page as i16 - 1), -5, memory.nibbles());
+            }
+            4..=15 => {
+                self.make_barrel_rom_page(
+                    -13,
+                    -11 - if page.is_multiple_of(2) { 16 } else { 0 },
+                    13 + 4 * ((page as i16 - 4) / 2),
+                    memory.nibbles(),
+                );
+            }
+            _ => {
+                panic!("Invalid ROM page {}", page);
+            }
+        }
     }
 }

@@ -21,8 +21,13 @@ fn main() {
         (-2, -1, 2),
         Block::Plain(PlainBlock::from_str("minecraft:glass").unwrap()),
     );
-    schem.place((0, -1, 0), Block::Barrel(6));
+    schem.place(
+        (0, -1, 0),
+        Block::Barrel {
+            ss: assembly::Nibble::N6,
+        },
+    );
 
-    let mut file = std::fs::File::create("myexample.schem").unwrap();
+    let mut file = std::fs::File::create("example.schem").unwrap();
     schem.finish(&mut file);
 }
