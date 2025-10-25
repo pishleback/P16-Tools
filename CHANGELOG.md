@@ -5,6 +5,7 @@ Hardware changes:
  - Fixed bug where the RAM hex to bin decoders were async causing occational bit flips when loading a RAM page.
  - Fixed an addressing bug with the program cache where addresses 110xxxxx would all read blank leading to a series of output instructions being executed in that section of the program.
  - Fixed timing bug where the top four layers of program cache (the second half of the cache) would all be off by one address when reading a page from RAM.
+ - Fixed hardware bug where instructions B2r (write without pop) and B3r (write with pop) were swapped.
 
 # v2.0
 Hardware changes:
