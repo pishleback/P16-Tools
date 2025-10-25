@@ -1,6 +1,6 @@
 use crate::{
     assembly::{Assembly, ConstantExpression, Label, Line, Meta},
-    ProgramPtr, WithPos, RAM_SIZE_NIBBLES,
+    ProgramPtr, WithPos, RAM_SIZE, RAM_SIZE_NIBBLES,
 };
 use crate::{datatypes::Nibble, ProgramMemory};
 use std::{
@@ -8,12 +8,12 @@ use std::{
     hash::Hash,
 };
 
-#[derive(Debug)]
-struct Memory {
+#[derive(Debug, Clone)]
+pub struct PartialProgramMemory {
     rom_pages: [[Option<Nibble>; 256]; 16],
     ram: [Option<Nibble>; RAM_SIZE_NIBBLES as usize],
 }
-impl Memory {
+impl PartialProgramMemory {
     fn blank() -> Self {
         Self {
             rom_pages: [[None; 256]; 16],
@@ -46,13 +46,40 @@ impl Memory {
         }
     }
 
-    fn finish(&self) -> ProgramMemory {
+    fn fill_in(&self) -> ProgramMemory {
         ProgramMemory::new(
             core::array::from_fn(|i| {
                 core::array::from_fn(|j| self.rom_pages[i][j].unwrap_or(Nibble::N0))
             }),
             core::array::from_fn(|i| self.ram[i].unwrap_or(Nibble::N0)),
         )
+    }
+
+    // vector of (addr, value)
+    pub fn ram(&self) -> Vec<(u16, u16)> {
+        (0u16..=((RAM_SIZE - 1) as u16))
+            .filter_map(|addr| {
+                let naddr = 4 * addr as usize;
+
+                let n3 = self.ram[naddr + 3];
+                let n2 = self.ram[naddr + 2];
+                let n1 = self.ram[naddr + 1];
+                let n0 = self.ram[naddr];
+
+                if n0.is_none() & n1.is_none() & n2.is_none() & n3.is_none() {
+                    None
+                } else {
+                    let n3 = n3.unwrap_or(Nibble::N0);
+                    let n2 = n2.unwrap_or(Nibble::N0);
+                    let n1 = n1.unwrap_or(Nibble::N0);
+                    let n0 = n0.unwrap_or(Nibble::N0);
+                    Some((
+                        addr,
+                        n3.as_u16() | (n2.as_u16() << 4) | (n1.as_u16() << 8) | (n0.as_u16() << 12),
+                    ))
+                }
+            })
+            .collect()
     }
 }
 
@@ -104,7 +131,7 @@ pub enum AssemblyPageIdent {
 
 #[derive(Debug)]
 struct MemoryManager {
-    memory: Memory,
+    memory: PartialProgramMemory,
     rom_ptr: [Option<u8>; 16],     // None once full
     ram_nibble_ptr: Option<usize>, // None once full
 
@@ -123,7 +150,7 @@ struct MemoryManager {
 impl MemoryManager {
     fn blank() -> Self {
         Self {
-            memory: Memory::blank(),
+            memory: PartialProgramMemory::blank(),
             rom_ptr: [Some(0); 16],
             ram_nibble_ptr: Some(0),
             labelled_page_locations: HashMap::new(),
@@ -201,56 +228,67 @@ impl MemoryManager {
         }
     }
 
-    fn push_ram(&mut self, value: u16) -> Result<(), CompileError> {
+    fn skip_ram(&mut self) -> Result<(), CompileError> {
         if self.next_ram_word_ptr().is_none() {
             return Err(CompileError::RamFull);
         }
-        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
-            self.memory
-                .set_nibble(
-                    MemNibblePtr::Ram(ram_nibble_ptr),
-                    Nibble::new(((value >> 12) & 15) as u8).unwrap(),
-                )
-                .unwrap();
-        } else {
-            return Err(CompileError::RamFull);
-        }
         self.inc_ram();
-        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
-            self.memory
-                .set_nibble(
-                    MemNibblePtr::Ram(ram_nibble_ptr),
-                    Nibble::new(((value >> 8) & 15) as u8).unwrap(),
-                )
-                .unwrap();
-        } else {
-            return Err(CompileError::RamFull);
-        }
         self.inc_ram();
-        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
-            self.memory
-                .set_nibble(
-                    MemNibblePtr::Ram(ram_nibble_ptr),
-                    Nibble::new(((value >> 4) & 15) as u8).unwrap(),
-                )
-                .unwrap();
-        } else {
-            return Err(CompileError::RamFull);
-        }
         self.inc_ram();
-        if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
-            self.memory
-                .set_nibble(
-                    MemNibblePtr::Ram(ram_nibble_ptr),
-                    Nibble::new((value & 15) as u8).unwrap(),
-                )
-                .unwrap();
-        } else {
-            return Err(CompileError::RamFull);
-        }
         self.inc_ram();
         Ok(())
     }
+
+    // fn push_ram(&mut self, value: u16) -> Result<(), CompileError> {
+    //     if self.next_ram_word_ptr().is_none() {
+    //         return Err(CompileError::RamFull);
+    //     }
+    //     if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+    //         self.memory
+    //             .set_nibble(
+    //                 MemNibblePtr::Ram(ram_nibble_ptr),
+    //                 Nibble::new(((value >> 12) & 15) as u8).unwrap(),
+    //             )
+    //             .unwrap();
+    //     } else {
+    //         return Err(CompileError::RamFull);
+    //     }
+    //     self.inc_ram();
+    //     if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+    //         self.memory
+    //             .set_nibble(
+    //                 MemNibblePtr::Ram(ram_nibble_ptr),
+    //                 Nibble::new(((value >> 8) & 15) as u8).unwrap(),
+    //             )
+    //             .unwrap();
+    //     } else {
+    //         return Err(CompileError::RamFull);
+    //     }
+    //     self.inc_ram();
+    //     if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+    //         self.memory
+    //             .set_nibble(
+    //                 MemNibblePtr::Ram(ram_nibble_ptr),
+    //                 Nibble::new(((value >> 4) & 15) as u8).unwrap(),
+    //             )
+    //             .unwrap();
+    //     } else {
+    //         return Err(CompileError::RamFull);
+    //     }
+    //     self.inc_ram();
+    //     if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
+    //         self.memory
+    //             .set_nibble(
+    //                 MemNibblePtr::Ram(ram_nibble_ptr),
+    //                 Nibble::new((value & 15) as u8).unwrap(),
+    //             )
+    //             .unwrap();
+    //     } else {
+    //         return Err(CompileError::RamFull);
+    //     }
+    //     self.inc_ram();
+    //     Ok(())
+    // }
 
     fn label_constant(
         &mut self,
@@ -285,6 +323,9 @@ impl MemoryManager {
         const_expr: WithPos<ConstantExpression>,
         line: LayoutPagesLine,
     ) -> Result<(), CompileError> {
+        if self.next_ram_word_ptr().is_none() {
+            return Err(CompileError::RamFull);
+        }
         if let Some(ram_nibble_ptr) = self.ram_nibble_ptr {
             self.labelled_constant_targets.push((
                 const_expr,
@@ -304,7 +345,7 @@ impl MemoryManager {
         }
     }
 
-    fn finish(mut self) -> Result<Memory, CompileError> {
+    fn finish(mut self) -> Result<PartialProgramMemory, CompileError> {
         // Replace labels with u8 page addresses
         for (label, blank_page, blank_ptr) in &self.labelled_page_location_targets {
             let (_target_page, target_ptr) = self.labelled_page_locations.get(label).unwrap();
@@ -773,7 +814,7 @@ pub struct RamPageLocation {
 
 #[derive(Debug, Clone)]
 pub struct CompileSuccess {
-    program_memory: ProgramMemory,
+    program_memory: PartialProgramMemory,
     ram_pages: Vec<RamPageLocation>, // One for each PageIdent::Ram(#) in the page layout i.e. one for each ..RAM section in the assembly in the same order as they appear
     rom_lines: [Vec<CompiledLine>; 16],
     ram_lines: Vec<Vec<CompiledLine>>, // outer vec bijects with the ..RAM pages
@@ -783,7 +824,11 @@ pub struct CompileSuccess {
 }
 
 impl CompileSuccess {
-    pub fn memory(&self) -> &ProgramMemory {
+    pub fn memory(&self) -> ProgramMemory {
+        self.program_memory.fill_in()
+    }
+
+    pub fn partial_memory(&self) -> &PartialProgramMemory {
         &self.program_memory
     }
 
@@ -1353,7 +1398,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
                                     line.assembly_line_num,
                                 )?;
                                 for _ in 0..quantity {
-                                    code.push_ram(0)?;
+                                    code.skip_ram()?;
                                 }
                             }
 
@@ -1383,8 +1428,7 @@ pub fn compile_assembly(page_layout: &LayoutPagesSuccess) -> Result<CompileSucce
 
     let ram_ident_to_addr = code.ram_ident_to_addr.clone();
 
-    let memory = code.finish()?;
-    let program_memory = memory.finish();
+    let program_memory = code.finish()?;
 
     Ok(CompileSuccess {
         program_memory,

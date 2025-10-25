@@ -8,7 +8,7 @@ use std::collections::HashSet;
 #[cfg(target_arch = "wasm32")]
 mod save_schem {
     use js_sys::Uint8Array;
-    use schemgen::Schem;
+    use schemgen::Blocks;
     use wasm_bindgen::JsCast;
     use wasm_bindgen::prelude::*;
     use web_sys::{Blob, BlobPropertyBag, Document, HtmlAnchorElement, Url, Window};
@@ -49,7 +49,7 @@ mod save_schem {
         Ok(())
     }
 
-    pub fn save(schem: Schem) {
+    pub fn save(schem: Blocks) {
         let mut bytes: Vec<u8> = vec![];
         schem.finish(&mut bytes).unwrap();
         download_binary_file("p16_program.schem", &bytes).unwrap();
@@ -58,9 +58,9 @@ mod save_schem {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod save_schem {
-    use schemgen::Schem;
+    use schemgen::Blocks;
 
-    pub fn save(schem: Schem) {
+    pub fn save(schem: Blocks) {
         if let Some(path) = rfd::FileDialog::new()
             .set_title("Save schematic as...")
             .save_file()
@@ -87,6 +87,7 @@ pub fn update(
         .show(ui, |ui| {
             if let Ok((Ok((Ok(compiled), _page_layout)), _assembly)) = &compile_result {
                 let raw_memory = compiled.memory().clone();
+                let partial_raw_memory = compiled.partial_memory().clone();
 
                 if ui
                     .button({
@@ -98,11 +99,12 @@ pub fn update(
                     })
                     .clicked()
                 {
-                    let mut schem = schemgen::Schem::new();
+                    let mut schem = schemgen::Blocks::new();
                     for i in 1u8..16 {
                         let i = Nibble::new(i).unwrap();
                         schem.place_rom_page(i, raw_memory.rom_page(i));
                     }
+                    schem.place_ram_data(partial_raw_memory.ram());
                     save_schem::save(schem);
                 }
 

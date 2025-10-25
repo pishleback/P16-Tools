@@ -117,7 +117,7 @@ impl ProgramMemory {
         serde_json::Value::Object(json)
     }
 
-    pub fn new(rom: [[Nibble; 256]; 16], ram: [Nibble; 1 << (12 + 2)]) -> Self {
+    pub fn new(rom: [[Nibble; 256]; 16], ram: [Nibble; RAM_SIZE_NIBBLES as usize]) -> Self {
         Self {
             rom: core::array::from_fn(|i| ProgramPage {
                 data: core::array::from_fn(|j| rom[i][j]),

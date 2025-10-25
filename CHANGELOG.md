@@ -1,5 +1,11 @@
 # WIP
 
+Hardware changes:
+ - Fixed missing dust for writing to the input queue after a RAM read instruction.
+ - Fixed bug where the RAM hex to bin decoders were async causing occational bit flips when loading a RAM page.
+ - Fixed an addressing bug with the program cache where addresses 110xxxxx would all read blank leading to a series of output instructions being executed in that section of the program.
+ - Fixed timing bug where the top four layers of program cache (the second half of the cache) would all be off by one address when reading a page from RAM.
+
 # v2.0
 Hardware changes:
  - Removed clear input queue button.
