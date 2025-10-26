@@ -7,6 +7,7 @@ Hardware changes:
  - Fixed timing bug where the top four layers of program cache (the second half of the cache) would all be off by one address when reading a page from RAM.
  - Fixed hardware bug where instructions B2r (write without pop) and B3r (write with pop) were swapped.
  - Fixed timings for RAM data input. The input into the four bin -> hex encoders all had a 5 tick delay on the bit with value 8 instead of a 4 tick delay. It occationally caused bit flips during writes.
+ - Fixed bug where torch burnout could occur on the program cache read logic at the location of the first instruction to run if the new page being loaded turned on and off too quickly at that location.
 
 # v2.0
 Hardware changes:
