@@ -6,6 +6,7 @@ Hardware changes:
  - Fixed an addressing bug with the program cache where addresses 110xxxxx would all read blank leading to a series of output instructions being executed in that section of the program.
  - Fixed timing bug where the top four layers of program cache (the second half of the cache) would all be off by one address when reading a page from RAM.
  - Fixed hardware bug where instructions B2r (write without pop) and B3r (write with pop) were swapped.
+ - Fixed timings for RAM data input. The input into the four bin -> hex encoders all had a 5 tick delay on the bit with value 8 instead of a 4 tick delay. It occationally caused bit flips during writes.
 
 # v2.0
 Hardware changes:
