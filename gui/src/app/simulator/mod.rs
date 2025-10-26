@@ -134,7 +134,7 @@ pub fn update<SimulatorState: SimulatorStateTrait>(
                         if simulator.get_instructions_per_second() == 0.0 {
                             ui.label("Paused");
                             if ui.button("Step").clicked() {
-                                simulator.one_step(false);
+                                simulator.one_step(simulator.is_at_breakpoint());
                             }
                         } else if simulator.is_at_breakpoint() {
                             ui.label("Break Point");
