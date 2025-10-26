@@ -1,5 +1,6 @@
 # WIP
 
+# v2.1
 Hardware changes:
  - Fixed missing dust for writing to the input queue after a RAM read instruction.
  - Fixed bug where the RAM hex to bin decoders were async causing occational bit flips when loading a RAM page.
