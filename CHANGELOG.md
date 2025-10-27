@@ -1,4 +1,6 @@
 # WIP
+Hardware changes:
+ - Added interface for automatically loading some stuff into RAM before starting the program.
 
 # v2.1
 Hardware changes:

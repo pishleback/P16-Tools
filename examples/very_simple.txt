@@ -6,4 +6,5 @@
 VALUE 69
 # Pop 69 from the stack into register 0
 POP %0
+# Halt
 RETURN

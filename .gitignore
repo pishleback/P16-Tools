@@ -4,6 +4,7 @@
 /gui/dist
 /schemgen/target
 /schemgen/example.schem
+/target
 prog.schem
 prog.json
 prog.txt
