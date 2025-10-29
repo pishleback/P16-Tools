@@ -3,6 +3,7 @@ mod program_memory;
 mod random_access_memory;
 mod simulator;
 mod state;
+mod external;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -68,5 +69,6 @@ impl eframe::App for MyApp {
         });
 
         self.state.update(ctx, frame);
+        ctx.request_repaint();
     }
 }

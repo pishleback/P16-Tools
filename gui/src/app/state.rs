@@ -1,4 +1,4 @@
-use crate::app::simulator;
+use crate::app::simulator::{self, SimulatorStateTrait};
 use assembly::{FullCompileResult, full_compile};
 use egui::{Color32, RichText};
 use std::collections::HashSet;
@@ -19,6 +19,9 @@ pub struct State {
     #[cfg(target_arch = "wasm32")]
     #[serde(skip)]
     pub simulator: simulator::State<simulator::singlethreaded::SimulatorState>,
+
+    #[serde(skip)]
+    pub external: super::external::State,
 }
 
 impl Default for State {
@@ -28,6 +31,7 @@ impl Default for State {
             selected_lines: None,
             memory: Default::default(),
             simulator: Default::default(),
+            external: Default::default(),
         };
         state.simulator.update_source(&state.source);
         state
@@ -62,6 +66,17 @@ impl State {
         egui::Window::new("Simulator").show(ctx, |ui| {
             simulator::update(&mut self.simulator, ctx, frame, ui);
         });
+
+        if let Some(simulator) = self.simulator.simulator_mut() {
+            let output_queue = simulator.output_queue();
+            let outputs = {
+                let mut output_queue = output_queue.lock().unwrap();
+                std::iter::from_fn(|| output_queue.pop()).collect::<Vec<_>>()
+            };
+            self.external.handle_io(simulator.input_queue(), outputs);
+        }
+
+        self.external.update(ctx, frame);
 
         // Central text area
         egui::CentralPanel::default().show(ctx, |ui| {

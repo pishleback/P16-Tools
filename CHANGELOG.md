@@ -1,6 +1,7 @@
 # WIP
 Hardware changes:
  - Added interface for automatically loading some stuff into RAM before starting the program.
+ - Added external multiplier.
 
 # v2.1
 Hardware changes:

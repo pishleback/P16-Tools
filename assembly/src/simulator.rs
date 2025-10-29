@@ -129,6 +129,12 @@ impl OutputQueue {
     pub fn pop(&mut self) -> Option<(Vec<OctDigit>, u16)> {
         self.queue.pop_front()
     }
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
 }
 
 const DATA_STACK_SIZE: usize = 32;

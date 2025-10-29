@@ -59,15 +59,31 @@ impl SimulatorStateTrait for SimulatorState {
                     };
 
                     for i in 0..n {
-                        // check we've not been in the loop too long to keep us responsive to instructions_per_second
-                        if i % 65536 == 0
-                            && std::time::SystemTime::now()
+                        if i % 65536 == 0 {
+                            let skip = {
+                                simulator
+                                    .lock()
+                                    .unwrap()
+                                    .output_queue()
+                                    .lock()
+                                    .unwrap()
+                                    .len()
+                                    >= 100000
+                            };
+                            if skip {
+                                std::thread::sleep(std::time::Duration::from_millis(100));
+                                break;
+                            }
+                            // check we've not been in the loop too long to keep us responsive to instructions_per_second
+
+                            if std::time::SystemTime::now()
                                 .duration_since(prev_time)
                                 .unwrap()
                                 .as_secs_f64()
                                 > 1.0
-                        {
-                            break;
+                            {
+                                break;
+                            }
                         }
 
                         let ignore_breakpoints = {
@@ -160,5 +176,13 @@ impl SimulatorStateTrait for SimulatorState {
 
     fn get_data_stack(&mut self) -> Vec<u16> {
         self.simulator.lock().unwrap().get_data_stack()
+    }
+
+    fn input_queue(&mut self) -> Arc<Mutex<assembly::InputQueue>> {
+        self.simulator.lock().unwrap().input_queue()
+    }
+
+    fn output_queue(&mut self) -> Arc<Mutex<assembly::OutputQueue>> {
+        self.simulator.lock().unwrap().output_queue()
     }
 }

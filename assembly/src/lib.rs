@@ -31,6 +31,8 @@ pub use memory::RAM_SIZE;
 pub use memory::RAM_SIZE_NIBBLES;
 pub use simulator::EndErrorState;
 pub use simulator::EndStepOkState;
+pub use simulator::InputQueue;
+pub use simulator::OutputQueue;
 pub use simulator::ProgramPagePtr;
 pub use simulator::ProgramPtr;
 pub use simulator::Simulator;

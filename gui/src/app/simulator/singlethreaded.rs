@@ -63,6 +63,10 @@ impl SimulatorStateTrait for SimulatorState {
     }
 
     fn process(&mut self, max_time: chrono::TimeDelta) {
+        if self.simulator.output_queue().lock().unwrap().len() >= 1000 {
+            // Wait for outputs to be handled
+            return;
+        }
         let start_time = chrono::Utc::now();
         self.instructions_to_do +=
             self.instructions_per_second * (start_time - self.prev_time).as_seconds_f64();
@@ -93,5 +97,13 @@ impl SimulatorStateTrait for SimulatorState {
 
     fn get_data_stack(&mut self) -> Vec<u16> {
         self.simulator.get_data_stack()
+    }
+
+    fn input_queue(&mut self) -> std::sync::Arc<std::sync::Mutex<assembly::InputQueue>> {
+        self.simulator.input_queue()
+    }
+
+    fn output_queue(&mut self) -> std::sync::Arc<std::sync::Mutex<assembly::OutputQueue>> {
+        self.simulator.output_queue()
     }
 }

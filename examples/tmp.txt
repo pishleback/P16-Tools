@@ -1,0 +1,8 @@
+..ROM 0
+VALUE 0
+.LABEL loop
+DUP DUP
+OUTPUT 4.0
+OUTPUT 4.5
+INC
+JUMP loop

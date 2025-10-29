@@ -1,4 +1,9 @@
-use assembly::{EndErrorState, Nibble, ProgramMemory, ProgramPtr, Simulator, full_compile};
+use std::sync::{Arc, Mutex};
+
+use assembly::{
+    EndErrorState, InputQueue, Nibble, OutputQueue, ProgramMemory, ProgramPtr, Simulator,
+    full_compile,
+};
 use egui::{RichText, Slider};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -30,6 +35,9 @@ pub trait SimulatorStateTrait {
     fn get_pc(&self) -> ProgramPtr;
     fn get_memory(&self) -> ProgramMemory;
     fn get_data_stack(&mut self) -> Vec<u16>;
+
+    fn input_queue(&mut self) -> Arc<Mutex<InputQueue>>;
+    fn output_queue(&mut self) -> Arc<Mutex<OutputQueue>>;
 }
 
 pub struct State<SimulatorState: SimulatorStateTrait> {
@@ -85,6 +93,10 @@ impl<SimulatorState: SimulatorStateTrait> State<SimulatorState> {
 
     pub fn simulator(&self) -> Option<&SimulatorState> {
         self.simulator.as_ref()
+    }
+
+    pub fn simulator_mut(&mut self) -> Option<&mut SimulatorState> {
+        self.simulator.as_mut()
     }
 
     fn get_data_stack(&mut self) -> Vec<u16> {
