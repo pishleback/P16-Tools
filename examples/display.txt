@@ -1,0 +1,36 @@
+# Example usage of the 64x64 display
+..ROM 0
+
+# Turn on entire screen
+DUP DUP
+OUTPUT 4.2
+OUTPUT 4.7
+
+# Clear entire screen
+DUP DUP
+OUTPUT 4.2
+OUTPUT 4.3
+
+# Turn on at (3, 9)
+VALUE 3
+OUTPUT 4.0
+VALUE 9
+OUTPUT 4.5
+
+# Fill row 40
+VALUE 40 DUP
+OUTPUT 4.2
+OUTPUT 4.5
+
+# Fill column 20
+VALUE 20 DUP
+OUTPUT 4.0
+OUTPUT 4.7
+
+# Turn off at (20, 40) where the row and column meet
+VALUE 20
+OUTPUT 4.0
+VALUE 40
+OUTPUT 4.1
+
+RETURN

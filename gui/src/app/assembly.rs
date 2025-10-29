@@ -41,6 +41,7 @@ pub fn update(
                     include_str!("../../../examples/fibonancii.txt"),
                 ),
                 ("Multiply", include_str!("../../../examples/multiply.txt")),
+                ("Display", include_str!("../../../examples/display.txt")),
                 ("Ackermann", include_str!("../../../examples/ackermann.txt")),
                 ("Stack", include_str!("../../../examples/stack.txt")),
                 ("Heap", include_str!("../../../examples/heap.txt")),
