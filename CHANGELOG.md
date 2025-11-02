@@ -1,7 +1,10 @@
 # WIP
+
+# 2.2
 Hardware changes:
- - Added interface for automatically loading some stuff into RAM before starting the program.
+ - Added interface for automatically loading some stuff into RAM before starting the program. 3t pulse goes out and execution begins only after 3t pulse comes back.
  - Added external multiplier.
+ - Added external 64x64 display.
 
 # v2.1
 Hardware changes:
