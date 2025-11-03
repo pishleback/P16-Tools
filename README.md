@@ -45,7 +45,7 @@ The table below describes the assembly instructions. The last column describes h
 | `..ROM <page>`               | All following instructions are placed in ROM page #`page` until told otherwise where `page` is between 0 and 15.                                                                                                                                                                                                    |         -          | -                                                                                                                                                                                                                                                                                              |
 | `..RAM`                      | All following instructions are placed in RAM until told otherwise.                                                                                                                                                                                                                                                  |         -          | -                                                                                                                                                                                                                                                                                              |
 | `PASS`                       | Does nothing.                                                                                                                                                                                                                                                                                                       |        :x:         | `0`                                                                                                                                                                                                                                                                                            |
-| `VALUE <constexpr>`          | Evaluate `constexpr` at compile-time and push the value onto the stack. `constexpr` may depend on constants defined by `.CONSTANT` instructions. It may also depend on RAM addresses defined by `.LABEL` instructions inside `..DATA` pages.                                                                        |        :x:         | `1vvvv` where `vvvv` is the 16-bit representation of `constexpr`.                                                                                                                                                                                                                              |
+| `PUSH <constexpr>`           | Evaluate `constexpr` at compile-time and push the value onto the stack. `constexpr` may depend on constants defined by `.CONSTANT` instructions. It may also depend on RAM addresses defined by `.LABEL` instructions inside `..DATA` pages.                                                                        |        :x:         | `1vvvv` where `vvvv` is the 16-bit representation of `constexpr`.                                                                                                                                                                                                                              |
 | `.LABEL <label>`             | Label a location in the current page of the program.                                                                                                                                                                                                                                                                |         -          | -                                                                                                                                                                                                                                                                                              |
 | `JUMP <label>`               | Continue execution from the`.LABEL` called `label`.                                                                                                                                                                                                                                                                 |        :x:         | `2aa` where `aa` is the address of `label` in the current page.                                                                                                                                                                                                                                |
 | `.USEFLAGS`                  | Placed after an instruction which sets ALU flags to ensure that the next `BRANCH` instruction uses those flags. Additional `PASS` instructions will be inserted to uphold this condition if possible. If a later instruction would overwrite the flags used by the `BRANCH` then the assembly will fail to compile. |         -          | -                                                                                                                                                                                                                                                                                              |
@@ -106,7 +106,7 @@ There are also some commands for populating RAM with data.
 Syntax of the common arguments not explained in the tables above:
  - `<constexpr>` arguments are expressions constructed using integer literals, `<label>`s, and the binary operations of addition `+`, subtraction `-`, and multiplication `*`. `*` is evaluted before `+` and `-`. Operations wrap to produce 16-bit values.
  - `<label>` arguments are lower-case strings of letters, digits, and underscores. They cannot begin with a digit.
- - `<register>` arguments are one of `%0`, `%1`, ..., `%F`.
+ - `<register>` arguments are one of `r0`, `r1`, ..., `r15`.
 
 There are four ALU flags `Z`, `N`, `C`, and `V` and an additional flag `I`. These five flags are set under the following conditions:
 
@@ -155,22 +155,7 @@ Comments can be put anywhere after a `#` character.
 
 ## Create an assembly file
 
-Create a file `prog.txt` in the root directory and populate it with an assembly program. To get started, copy the following program which takes two values as input, adds them, and outputs the result.
-
-```
-..ROM 0
-CALL start
-RETURN
-
-..ROM 1
-.LABEL start
-INPUT
-INPUT
-POP %0
-ADD %0
-OUTPUT 0.0
-RETURN
-```
+Create a file `prog.txt` in the root directory and populate it with an assembly program. To get started, take an example from the `examples` folder.
 
 ## Compile to machine code
 

@@ -10,8 +10,8 @@ RETURN
 ..ROM 1
 # setup
 .LABEL start
-VALUE a
-VALUE b
+PUSH a
+PUSH b
 CALL ack # ack(a, b)
 OUTPUT 1.0
 RETURN
@@ -19,32 +19,32 @@ RETURN
 # s = ack(a, b)
 # PUSH a PUSH b CALL ack POP s
 .LABEL ack
-POP %0 # b
+POP r0 # b
 DUP POPNOOP # a
 .USEFLAGS
-POP %1 # a
+POP r1 # a
 BRANCH !Z case2
 # a == 0
-PUSH %0 # b
+PUSH r0 # b
 INC # b+1
 RETURN
 
 # a != 0
 .LABEL case2
-PUSH %0 POPNOOP # b
+PUSH r0 POPNOOP # b
 .USEFLAGS
 BRANCH !Z case3 # b != 0
-PUSH %1 # a
+PUSH r1 # a
 DEC # a-1
-VALUE 1
+PUSH 1
 CALL ack # ack(a-1, 1)
 RETURN
 
 .LABEL case3
-PUSH %1 #a
+PUSH r1 #a
 DEC #a-1
-PUSH %1 #a
-PUSH %0 #b
+PUSH r1 #a
+PUSH r0 #b
 DEC # b-1
 CALL ack # ack(a, b-1)
 CALL ack # ack(a-1, ack(a, b-1))

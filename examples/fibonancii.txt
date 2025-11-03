@@ -1,13 +1,13 @@
 # Computes the fibonancii numbers in register 0 until there is an overflow.
 
 ..ROM 0
-VALUE 1
+PUSH 1
 DUP
-POP %0
+POP r0
 .LABEL loop
 DUP
 OUTPUT 1.0
-SADD %0
+SADD r0
 .USEFLAGS
 BRANCH C end
 JUMP loop

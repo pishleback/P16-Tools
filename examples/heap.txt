@@ -14,12 +14,12 @@
 # Heap data
 ..DATA
 ALLOC 1
-VALUE -1
+PUSH -1
 .LABEL heap_ptr
-VALUE heap_start
+PUSH heap_start
 .LABEL heap_start
-VALUE heap_size - 1 ALLOC heap_size - 1
-VALUE -1
+PUSH heap_size - 1 ALLOC heap_size - 1
+PUSH -1
 
 # Heap function calls
 ..ROM 2
@@ -31,26 +31,26 @@ VALUE -1
 # Registers:
 # - Uses %0 to %9
 .LABEL heap_new
-POP %0 # size to allocate
-VALUE heap_ptr
+POP r0 # size to allocate
+PUSH heap_ptr
 KREAD
-DUP POP %2 # address of heap_ptr
-VALUE heap_size POP %7 #size of the heap
-ADD %7 INC POP %5 # just after end of heap
-VALUE 32768 POP %6 # metadata mask
-VALUE 0
-POP %4 # Keep track of how much memory we've search for the purpose of out of memory detection
+DUP POP r2 # address of heap_ptr
+PUSH heap_size POP r7 #size of the heap
+ADD r7 INC POP r5 # just after end of heap
+PUSH 32768 POP r6 # metadata mask
+PUSH 0
+POP r4 # Keep track of how much memory we've search for the purpose of out of memory detection
 INPUT # Top of stack points at next block
-POP %1 # Point at next block
+POP r1 # Point at next block
 CALL heap_new_impl
 RETURN
 
 ..ROM 1
 .LABEL heap_new_impl
 .LABEL heap_new_loop
-PUSH %4 CMP %7 .USEFLAGS POPNOOP BRANCH HS heap_new_out_of_memory
+PUSH r4 CMP r7 .USEFLAGS POPNOOP BRANCH HS heap_new_out_of_memory
 # %1 should point at the next block to try
-PUSH %1
+PUSH r1
 CALL heap_new_read_block_metadata # Top of stack is size of the block
 .USEFLAGS
 BRANCH Z heap_new_jump_free
@@ -60,23 +60,23 @@ CALL heap_next_block
 JUMP heap_new_loop
 .LABEL heap_new_jump_free
 # A free block starting at %1 and the size on the top of the stack.
-CMP %0 .USEFLAGS  # Is it big enough?
-PUSH %1 POP %3 # Remember the start of the first free block in %3
+CMP r0 .USEFLAGS  # Is it big enough?
+PUSH r1 POP r3 # Remember the start of the first free block in %3
 BRANCH HI heap_new_alloc_smaller # Yes, and there is non-zero space left over
 BRANCH EQ heap_new_alloc_exact # Yes, it's exactly the right size
 # It is not big enough
-DUP POP %9 # Remember the size of the first free block in %9
+DUP POP r9 # Remember the size of the first free block in %9
 CALL heap_next_block
 .USEFLAGS
 BRANCH !Z heap_new_did_not_wrap
 # We wrapped so need to start again.
-PUSH %9
+PUSH r9
 CALL heap_new_update_size_tracker
 POPNOOP
 JUMP heap_new_loop
 .LABEL heap_new_did_not_wrap
 # Did not wrap. Is the next block a free block?
-PUSH %1
+PUSH r1
 CALL heap_new_read_block_metadata
 BRANCH Z heap_new_next_is_free
 # The next block is allocated. Skip it and continue looking for free blocks after it.
@@ -85,8 +85,8 @@ CALL heap_next_block
 JUMP heap_new_loop
 .LABEL heap_new_next_is_free
 # The next block is free. Merge it with the previous free block.
-INC ADD %9 POP %9 PUSH %3 PWRITE %9 
-PUSH %3 POP %1 PUSH %9 # Put the start of the previous block back in %1 and the new length at the top of the stack
+INC ADD r9 POP r9 PUSH r3 PWRITE r9 
+PUSH r3 POP r1 PUSH r9 # Put the start of the previous block back in %1 and the new length at the top of the stack
 JUMP heap_new_jump_free
 
 # Inputs
@@ -97,10 +97,10 @@ JUMP heap_new_jump_free
 # - Mark the first part of the block as allocated and mark the unallocated part as a new free block
 # - Pointer to start of contents of allocated block on the stack
 .LABEL heap_new_alloc_smaller
-SUB %0 DEC POP %4 #Size of free block
-PUSH %1 INC ADD %0 # Start of free block
-PWRITE %4
-PUSH %0
+SUB r0 DEC POP r4 #Size of free block
+PUSH r1 INC ADD r0 # Start of free block
+PWRITE r4
+PUSH r0
 JUMP heap_new_alloc_exact
 
 # Inputs
@@ -110,14 +110,14 @@ JUMP heap_new_alloc_exact
 # Outputs
 # - Pointer to start of contents of new allocated block on the stack
 .LABEL heap_new_alloc_exact
-DUP CALL heap_next_block PUSH %2 PWRITE %1
-OR %6 POP %4 PUSH %3 KWRITE %4 INC
+DUP CALL heap_next_block PUSH r2 PWRITE r1
+OR r6 POP r4 PUSH r3 KWRITE r4 INC
 RETURN
 
 # Add one more than the top of the stack to %4
 # To keep track of how much of the heap we've searched for  the purposes of out of memory detection
 .LABEL heap_new_update_size_tracker
-DUP INC ADD %4 POP %4 # Add the size of the block to %4
+DUP INC ADD r4 POP r4 # Add the size of the block to %4
 RETURN
 
 # Inputs
@@ -129,13 +129,13 @@ RETURN
 # - Modify %1 to point at the next block, wrapping if necessary.
 # - Set ALU flag Z to 1 if we wrapped and 0 if we did not wrap
 .LABEL heap_next_block
-ADD %1 INC # Next block pointer at top of stack
-CMP %5 .USEFLAGS BRANCH NE heap_no_wrap # Check if we need to wrap
-POPNOOP PUSH %2 INC POP %1 # Set %1 to the start of the heap
+ADD r1 INC # Next block pointer at top of stack
+CMP r5 .USEFLAGS BRANCH NE heap_no_wrap # Check if we need to wrap
+POPNOOP PUSH r2 INC POP r1 # Set %1 to the start of the heap
 SETFLAGS 1 # Set ALU flag Z to 1
 RETURN
 .LABEL heap_no_wrap
-POP %1
+POP r1
 SETFLAGS 0 # Set ALU flag Z to 0
 RETURN
 
@@ -145,16 +145,16 @@ RETURN
 # - Top of stack is size of block
 # - ALU zero flag is set iff block is free
 .LABEL heap_new_read_block_metadata
-PREAD INPUT POP %8 # Read block metadata into %8
-PUSH %6 NOT # metadata mask
-AND %8 # To be returned
-PUSH %6 AND %8 POPNOOP # Set flags according to whether the block is free or allocated
+PREAD INPUT POP r8 # Read block metadata into %8
+PUSH r6 NOT # metadata mask
+AND r8 # To be returned
+PUSH r6 AND r8 POPNOOP # Set flags according to whether the block is free or allocated
 RETURN
 
 .LABEL heap_new_out_of_memory
 # Split it up since we're out of memory
-VALUE heap_out_of_memory OR %F POP %F
-VALUE 0
+PUSH heap_out_of_memory OR r15 POP r15
+PUSH 0
 RETURN
 
 ..ROM 1
@@ -168,19 +168,19 @@ RETURN
 # May only be called once on addresses previously returned by heap_new
 .LABEL heap_delete
 # Mark the block starting at addr as free by unsetting the top bit
-DEC KREAD INPUT DUP POP %0 ADD %0 RSH POP %0 PWRITE %0
+DEC KREAD INPUT DUP POP r0 ADD r0 RSH POP r0 PWRITE r0
 RETURN
 
 
 # Example usage
 ..ROM 0
-VALUE 3 CALL heap_new POP %A
-VALUE 3 CALL heap_new POP %B
-VALUE 2 CALL heap_new POP %C
-PUSH %B CALL heap_delete
-VALUE 1 CALL heap_new POP %D
-PUSH %A CALL heap_delete
-PUSH %C CALL heap_delete
-PUSH %D CALL heap_delete
-VALUE 10 CALL heap_new POP %E
+PUSH 3 CALL heap_new POP r10
+PUSH 3 CALL heap_new POP r11
+PUSH 2 CALL heap_new POP r12
+PUSH r11 CALL heap_delete
+PUSH 1 CALL heap_new POP r13
+PUSH r10 CALL heap_delete
+PUSH r12 CALL heap_delete
+PUSH r13 CALL heap_delete
+PUSH 10 CALL heap_new POP r14
 RETURN

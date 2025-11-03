@@ -9,12 +9,12 @@
 
 ..DATA
 ALLOC 69 # To test that the stack still works even when it does not start at RAM address 0
-VALUE -1 # To mark the boundary before the sack
+PUSH -1 # To mark the boundary before the sack
 .LABEL stack_ptr
-VALUE stack_start # Point at the top of the stack
+PUSH stack_start # Point at the top of the stack
 .LABEL stack_start
 ALLOC stack_size
-VALUE -1 # To mark the boundary after the sack
+PUSH -1 # To mark the boundary after the sack
 
 # Public
 # Inputs:
@@ -27,27 +27,27 @@ VALUE -1 # To mark the boundary after the sack
 ..ROM 1
 # (value) -> ()
 .LABEL stack_push
-POP %0
-VALUE stack_ptr
+POP r0
+PUSH stack_ptr
 KREAD
-POP %1
-VALUE stack_start + stack_size
-POP %3
+POP r1
+PUSH stack_start + stack_size
+POP r3
 INPUT
-CMP %3
+CMP r3
 .USEFLAGS
 BRANCH EQ stack_push_stack_overflow
-KWRITE %0
+KWRITE r0
 INC
-POP %2
-PUSH %1
-PWRITE %2
+POP r2
+PUSH r1
+PWRITE r2
 RETURN
 .LABEL stack_push_stack_overflow
 POPNOOP
-VALUE stack_overflow_error_bit
-OR %F
-POP %F
+PUSH stack_overflow_error_bit
+OR r15
+POP r15
 RETURN
 
 # Public
@@ -59,38 +59,38 @@ RETURN
 # - Uses %0 %1 %2
 # - Sets error bits in %F
 .LABEL stack_pop
-VALUE stack_ptr
+PUSH stack_ptr
 KREAD
-POP %1
-VALUE stack_start
-POP %2
+POP r1
+PUSH stack_start
+POP r2
 INPUT
-CMP %2
+CMP r2
 .USEFLAGS
 DEC
 BRANCH EQ stack_push_stack_underflow
 KREAD
-POP %0
-PUSH %1
-PWRITE %0
+POP r0
+PUSH r1
+PWRITE r0
 INPUT
 RETURN
 
 .LABEL stack_push_stack_underflow
 POPNOOP
-VALUE stack_underflow_error_bit
-OR %F
-POP %F
+PUSH stack_underflow_error_bit
+OR r15
+POP r15
 RETURN
 
 
 # Example usage
 ..ROM 0
-VALUE 1 CALL stack_push
-VALUE 2 CALL stack_push
+PUSH 1 CALL stack_push
+PUSH 2 CALL stack_push
 CALL stack_pop
-VALUE 3 CALL stack_push
-VALUE 4 CALL stack_push
+PUSH 3 CALL stack_push
+PUSH 4 CALL stack_push
 CALL stack_pop
 CALL stack_pop
 CALL stack_pop

@@ -1,3 +1,9 @@
+# TODO
+Assembly changes:
+ - Change VALUE to PUSH inside program sections. Removed previous ambiguity between VALUE in program sections and VALUE in data sections.
+ - Changed registers from `%X` to `rX`.
+ - Removed `rA`, ..., `rF` for registers. Use `r10`, ..., `r15` instead.
+
 # WIP
 
 # 2.2
