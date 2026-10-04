@@ -251,7 +251,7 @@ fn show_16bit_value(ui: &mut egui::Ui, label: String, value: u16) {
             ui.painter().rect_stroke(
                 rect,
                 2.0,
-                egui::Stroke::new(1.0, egui::Color32::BLACK),
+                egui::Stroke::new(1.0_f32, egui::Color32::BLACK),
                 egui::StrokeKind::Middle,
             );
         }

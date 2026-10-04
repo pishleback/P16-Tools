@@ -1,25 +1,31 @@
-use mc_schem::Block as PlainBlock;
 use schemgen::{Block, Blocks};
-use std::str::FromStr;
 
 fn main() {
     let mut schem = Blocks::new();
 
     schem.place(
         (-2, -1, -2),
-        &Block::Plain(PlainBlock::from_id("minecraft:dirt").unwrap()),
+        &Block::Plain {
+            id: "minecraft:dirt".into(),
+        },
     );
     schem.place(
         (2, -1, 2),
-        &Block::Plain(PlainBlock::from_id("minecraft:dirt").unwrap()),
+        &Block::Plain {
+            id: "minecraft:dirt".into(),
+        },
     );
     schem.place(
         (2, -1, -2),
-        &Block::Plain(PlainBlock::from_id("minecraft:stone").unwrap()),
+        &Block::Plain {
+            id: "minecraft:stone".into(),
+        },
     );
     schem.place(
         (-2, -1, 2),
-        &Block::Plain(PlainBlock::from_id("minecraft:glass").unwrap()),
+        &Block::Plain {
+            id: "minecraft:glass".into(),
+        },
     );
     schem.place(
         (0, -1, 0),

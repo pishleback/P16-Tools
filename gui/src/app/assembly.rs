@@ -336,25 +336,22 @@ fn layout_job(
                                         _ => {}
                                     },
                                     Line::Meta(meta) => match meta {
-                                        Meta::UseFlags => {
+                                        Meta::UseFlags
                                             if selected_lines.len() == 1
-                                                && selected_lines.contains(&line_num)
-                                            {
-                                                let flag_lines = compiled
-                                                    .flag_setters_from_useflag(line_num)
-                                                    .unwrap();
-                                                let flag_lines = flag_lines
-                                                    .into_iter()
-                                                    .map(|flag_line| {
-                                                        assembly.line_with_pos(flag_line)
-                                                    })
-                                                    .collect::<Vec<_>>();
-                                                for flag_line in flag_lines {
-                                                    text_attrs.underline.insert(
-                                                        flag_line.start..flag_line.end,
-                                                        purple_underline,
-                                                    );
-                                                }
+                                                && selected_lines.contains(&line_num) =>
+                                        {
+                                            let flag_lines = compiled
+                                                .flag_setters_from_useflag(line_num)
+                                                .unwrap();
+                                            let flag_lines = flag_lines
+                                                .into_iter()
+                                                .map(|flag_line| assembly.line_with_pos(flag_line))
+                                                .collect::<Vec<_>>();
+                                            for flag_line in flag_lines {
+                                                text_attrs.underline.insert(
+                                                    flag_line.start..flag_line.end,
+                                                    purple_underline,
+                                                );
                                             }
                                         }
                                         _ => {}

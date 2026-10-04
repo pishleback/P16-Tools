@@ -3,6 +3,8 @@ use crate::app::state::State;
 use assembly::ProgramPagePtr;
 use assembly::{CompiledLine, FullCompileResult, Nibble};
 use egui::{Color32, TextBuffer, TextFormat, Ui, Visuals, text::LayoutJob};
+use schemgen::transforms::{Coords, Transform};
+use schemgen::{Block, Blocks, Compass};
 use std::collections::HashSet;
 
 #[cfg(target_arch = "wasm32")]
@@ -102,9 +104,9 @@ pub fn update(
                     let mut schem = schemgen::Blocks::new();
                     for i in 1u8..16 {
                         let i = Nibble::new(i).unwrap();
-                        schem.place_rom_page(i, raw_memory.rom_page(i));
+                        place_rom_page(&mut schem, i, raw_memory.rom_page(i));
                     }
-                    schem.place_ram_data(partial_raw_memory.ram());
+                    place_ram_data(&mut schem, partial_raw_memory.ram());
                     save_schem::save(schem);
                 }
 
@@ -338,4 +340,421 @@ fn page_raw(ui: &mut Ui, nibbles: Vec<Nibble>, pc: Option<u8>) {
             .interactive(false)
             .layouter(&mut layouter),
     );
+}
+
+fn make_torch_rom_page(blocks: &mut Blocks, ox: i32, oy: i32, oz: i32, nibbles: Vec<Nibble>) {
+    assert_eq!(nibbles.len(), 256);
+    fn set_nibble(schem: &mut Blocks, x: i32, y: i32, z: i32, n: Nibble) {
+        for i in 0usize..4 {
+            let dx = -2 * i as i32;
+            let block = if n.as_usize() & (1 << (3 - i)) != 0 {
+                Block::Plain {
+                    id: "minecraft:redstone_wall_torch[facing=north]".into(),
+                }
+            } else {
+                Block::Plain {
+                    id: "minecraft:glass".into(),
+                }
+            };
+            schem.place((x + dx, y, z), &block);
+        }
+    }
+
+    for (i, n) in nibbles.iter().enumerate() {
+        let (q, r) = (i / 32, i % 32);
+        set_nibble(blocks, ox - 8 * q as i32, oy, oz - 2 * r as i32, *n);
+    }
+}
+
+fn make_barrel_rom_page(blocks: &mut Blocks, ox: i32, oy: i32, oz: i32, nibbles: Vec<Nibble>) {
+    assert_eq!(nibbles.len(), 256);
+    for a in 0usize..8 {
+        for d in 0usize..32 {
+            let pos = (ox - 2 * d as i32, oy - 2 * a as i32, oz);
+            let ss = nibbles[d + 32 * a];
+            if ss == Nibble::N0 {
+                blocks.place(
+                    pos,
+                    &Block::Plain {
+                        id: "minecraft:glass".into(),
+                    },
+                );
+            } else {
+                blocks.place(pos, &Block::Barrel { ss });
+            }
+        }
+    }
+}
+
+fn place_rom_page(blocks: &mut Blocks, page: Nibble, memory: &assembly::ProgramPage) {
+    let page = page.as_usize();
+    match page {
+        0 => {
+            println!("Schematics for ROM page 0 are not supported.");
+        }
+        1..=3 => {
+            make_torch_rom_page(
+                blocks,
+                -5,
+                -10 - 5 * (page as i32 - 1),
+                -5,
+                memory.nibbles(),
+            );
+        }
+        4..=15 => {
+            make_barrel_rom_page(
+                blocks,
+                -13,
+                -11 - if page.is_multiple_of(2) { 16 } else { 0 },
+                13 + 4 * ((page as i32 - 4) / 2),
+                memory.nibbles(),
+            );
+        }
+        _ => {
+            panic!("Invalid ROM page {}", page);
+        }
+    }
+}
+
+struct RamCard {
+    coords: Coords,
+    section_sizes: Vec<usize>,
+    data_block: Block,
+    read_block: Block,
+}
+
+impl RamCard {
+    // first: The block at the very end where the input logic is
+    // aligned: The blocks above the output lines
+    // between: The blocks between the output lines
+    // join: The blocks between sections of output lines
+    fn place_stacked(
+        &self,
+        schem: &mut Blocks,
+        offset: (i32, i32, i32),
+        first: Option<&Block>,
+        aligned: Option<&Block>,
+        between: Option<&Block>,
+        join: Option<&Block>,
+    ) {
+        if let Some(first) = first {
+            schem.place(self.coords.local_to_global_pos(offset), first);
+        }
+        if let Some(aligned) = aligned {
+            let mut dz = 2i32;
+            for &size in &self.section_sizes {
+                for _ in 0..size {
+                    schem.place(
+                        self.coords
+                            .local_to_global_pos((offset.0, offset.1, offset.2 + dz)),
+                        aligned,
+                    );
+                    dz += 2;
+                }
+            }
+        }
+        if let Some(between) = between {
+            let mut dz = 3i32;
+            for &size in &self.section_sizes {
+                for _ in 1..size {
+                    schem.place(
+                        self.coords
+                            .local_to_global_pos((offset.0, offset.1, offset.2 + dz)),
+                        between,
+                    );
+                    dz += 2;
+                }
+                dz += 2;
+            }
+        }
+        if let Some(join) = join {
+            let mut dz = 1i32;
+            for &size in &self.section_sizes {
+                schem.place(
+                    self.coords
+                        .local_to_global_pos((offset.0, offset.1, offset.2 + dz)),
+                    join,
+                );
+                dz += 2 * size as i32;
+            }
+        }
+    }
+
+    fn place_data(&mut self, schem: &mut Blocks, data: Vec<Vec<bool>>) {
+        let n = self.section_sizes.len();
+        assert_eq!(n, data.len());
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..n {
+            assert_eq!(self.section_sizes[i], data[i].len());
+        }
+
+        // Read lines
+        self.place_stacked(schem, (0, 0, 0), Some(&self.read_block), None, None, None);
+        self.place_stacked(
+            schem,
+            (0, 1, 0),
+            Some(&Block::Repeater {
+                powered: true,
+                facing: self.coords.local_to_global_compass(Compass::East),
+                delay: 3,
+            }),
+            None,
+            None,
+            None,
+        );
+        self.place_stacked(
+            schem,
+            (1, 0, 0),
+            Some(&self.read_block),
+            Some(&self.read_block),
+            Some(&self.read_block),
+            Some(&self.read_block),
+        );
+        self.place_stacked(
+            schem,
+            (1, 1, 0),
+            Some(&Block::Dust { power: 15 }),
+            Some(&Block::Dust { power: 15 }),
+            Some(&Block::Dust { power: 15 }),
+            Some(&Block::Repeater {
+                powered: true,
+                facing: self.coords.local_to_global_compass(Compass::South),
+                delay: 1,
+            }),
+        );
+        // The torches for the data
+        {
+            let mut dz = 2i32;
+            for (i, &size) in self.section_sizes.iter().enumerate() {
+                #[allow(clippy::needless_range_loop)]
+                for j in 0usize..size {
+                    if data[i][j] {
+                        schem.place(
+                            self.coords.local_to_global_pos((0, 0, dz)),
+                            &Block::WallTorch {
+                                lit: false,
+                                facing: self.coords.local_to_global_compass(Compass::West),
+                            },
+                        );
+                    }
+                    dz += 2;
+                }
+            }
+        }
+
+        // Data lines
+        self.place_stacked(schem, (0, -2, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(schem, (1, -2, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(
+            schem,
+            (0, -1, 0),
+            None,
+            Some(&Block::Dust { power: 0 }),
+            None,
+            None,
+        );
+        self.place_stacked(
+            schem,
+            (1, -1, 0),
+            None,
+            Some(&Block::Repeater {
+                powered: false,
+                facing: self.coords.local_to_global_compass(Compass::West),
+                delay: 3,
+            }),
+            None,
+            None,
+        );
+
+        // Update coords
+        self.coords
+            .apply_local_transform(Transform::translate((2, 0, 0)));
+    }
+
+    fn place_new_layer(&mut self, schem: &mut Blocks) {
+        // Read lines
+        schem.place(self.coords.local_to_global_pos((0, 1, 0)), &self.read_block);
+        schem.place(
+            self.coords.local_to_global_pos((0, 2, 0)),
+            &Block::Dust { power: 15 },
+        );
+        schem.place(self.coords.local_to_global_pos((1, 2, 0)), &self.read_block);
+        schem.place(
+            self.coords.local_to_global_pos((1, 3, 0)),
+            &Block::Torch { lit: false },
+        );
+        schem.place(self.coords.local_to_global_pos((1, 4, 0)), &self.read_block);
+        schem.place(
+            self.coords.local_to_global_pos((1, 5, 0)),
+            &Block::Torch { lit: true },
+        );
+
+        // Data lines
+        self.place_stacked(schem, (0, -2, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(schem, (0, 0, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(schem, (1, -1, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(schem, (2, 0, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(schem, (1, 1, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(
+            schem,
+            (0, -1, 0),
+            None,
+            Some(&Block::Dust { power: 0 }),
+            None,
+            None,
+        );
+        self.place_stacked(
+            schem,
+            (1, 0, 0),
+            None,
+            Some(&Block::Repeater {
+                powered: false,
+                facing: self.coords.local_to_global_compass(Compass::West),
+                delay: 1,
+            }),
+            None,
+            None,
+        );
+        self.place_stacked(
+            schem,
+            (2, 1, 0),
+            None,
+            Some(&Block::Dust { power: 0 }),
+            None,
+            None,
+        );
+        self.place_stacked(
+            schem,
+            (1, 2, 0),
+            None,
+            Some(&Block::Dust { power: 0 }),
+            None,
+            None,
+        );
+
+        self.coords
+            .apply_local_transform(Transform::flip_x() * Transform::translate((0, 4, 0)));
+    }
+
+    fn place_start(&mut self, schem: &mut Blocks) {
+        self.place_stacked(schem, (-1, -2, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(
+            schem,
+            (-1, -1, 0),
+            None,
+            Some(&Block::Dust { power: 0 }),
+            None,
+            None,
+        );
+        self.place_stacked(schem, (-2, -2, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(
+            schem,
+            (-2, -1, 0),
+            None,
+            Some(&Block::Dust { power: 0 }),
+            None,
+            None,
+        );
+        self.place_stacked(schem, (-3, -2, 0), None, Some(&self.data_block), None, None);
+        self.place_stacked(
+            schem,
+            (-3, -1, 0),
+            None,
+            Some(&Block::Repeater {
+                powered: false,
+                facing: self.coords.local_to_global_compass(Compass::West),
+                delay: 1,
+            }),
+            None,
+            None,
+        );
+
+        self.place_stacked(schem, (-2, 1, 0), Some(&self.read_block), None, None, None);
+        self.place_stacked(schem, (-3, 0, 0), Some(&self.read_block), None, None, None);
+        self.place_stacked(
+            schem,
+            (-1, 1, 0),
+            Some(&Block::WallTorch {
+                lit: true,
+                facing: Compass::East,
+            }),
+            None,
+            None,
+            None,
+        );
+        self.place_stacked(
+            schem,
+            (-3, 1, 0),
+            Some(&Block::Repeater {
+                powered: false,
+                facing: self.coords.local_to_global_compass(Compass::East),
+                delay: 1,
+            }),
+            None,
+            None,
+            None,
+        );
+    }
+}
+
+// input is a list of (addr, value) pairs to write
+fn place_ram_data(blocks: &mut Blocks, values: Vec<(u16, u16)>) {
+    println!("{:?}", values);
+
+    let mut state = RamCard {
+        coords: Coords {
+            transform: Transform::translate((47, -49, -78)),
+        },
+        section_sizes: vec![8, 6, 8, 8],
+        data_block: Block::Plain {
+            id: "minecraft:gray_wool".into(),
+        },
+        read_block: Block::Plain {
+            id: "minecraft:lime_wool".into(),
+        },
+    };
+
+    state.place_start(blocks);
+
+    let mut i = 0;
+    let layer_at_i = 8;
+    for (addr, value) in values {
+        // Data
+        {
+            if i == layer_at_i {
+                i = 0;
+                state.place_new_layer(blocks);
+            }
+            state.place_data(
+                blocks,
+                vec![
+                    (0..8).map(|i| (addr >> i) & 1 != 0).collect(),
+                    (8..12)
+                        .map(|i| (addr >> i) & 1 != 0)
+                        .chain(vec![false, true])
+                        .collect(),
+                    (0..8).map(|i| (value >> i) & 1 != 0).collect(),
+                    (8..16).map(|i| (value >> i) & 1 != 0).collect(),
+                ],
+            );
+            i += 1;
+        }
+        {
+            // Dummy for more delay
+            if i == layer_at_i {
+                i = 0;
+                state.place_new_layer(blocks);
+            }
+            state.place_data(
+                blocks,
+                vec![
+                    (0..8).map(|_| false).collect(),
+                    (8..12).map(|_| false).chain(vec![false, false]).collect(),
+                    (0..8).map(|_| false).collect(),
+                    (8..16).map(|_| false).collect(),
+                ],
+            );
+            i += 1;
+        }
+    }
 }

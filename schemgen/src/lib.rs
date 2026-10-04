@@ -1,45 +1,8 @@
 pub use assembly::Nibble;
 use mc_schem::{Block as PlainBlock, region::Region};
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Mat4 {
-    entries: [[i32; 4]; 4],
-}
-
-impl Mat4 {
-    fn print_rows(&self) {
-        for row in self.entries {
-            println!("{:?}", row);
-        }
-    }
-
-    fn identity() -> Self {
-        Self {
-            entries: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
-        }
-    }
-
-    fn apply(&self, vec: [i32; 4]) -> [i32; 4] {
-        std::array::from_fn(|r| (0usize..4).map(|c| self.entries[r][c] * vec[c]).sum())
-    }
-}
-
-impl std::ops::Mul<Mat4> for Mat4 {
-    type Output = Mat4;
-
-    fn mul(self, other: Mat4) -> Self::Output {
-        Mat4 {
-            entries: std::array::from_fn(|r| {
-                std::array::from_fn(|c| {
-                    (0usize..4)
-                        .map(|k| self.entries[r][k] * other.entries[k][c])
-                        .sum()
-                })
-            }),
-        }
-    }
-}
+pub mod transforms;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Compass {
@@ -72,128 +35,6 @@ impl Compass {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Transform {
-    // Bottom row is 0 0 0 1
-    // Act on positions by (x, y, z, 1) -> M (x, y, z, 1).012
-    // Act on vectors by (x, y, z, 0) -> M (x, y, z, 0).012
-    forward: Mat4,
-    backward: Mat4,
-}
-
-impl std::ops::Mul<Transform> for Transform {
-    type Output = Transform;
-
-    fn mul(self, other: Transform) -> Self::Output {
-        Transform::new(self.forward * other.forward, other.backward * self.backward)
-    }
-}
-
-impl Transform {
-    fn new(forward: Mat4, backward: Mat4) -> Self {
-        debug_assert_eq!(forward * backward, Mat4::identity());
-        Self { forward, backward }
-    }
-
-    fn inverse(self) -> Self {
-        Self::new(self.backward, self.forward)
-    }
-
-    fn translate((dx, dy, dz): (i32, i32, i32)) -> Self {
-        Self::new(
-            Mat4 {
-                entries: [[1, 0, 0, dx], [0, 1, 0, dy], [0, 0, 1, dz], [0, 0, 0, 1]],
-            },
-            Mat4 {
-                entries: [[1, 0, 0, -dx], [0, 1, 0, -dy], [0, 0, 1, -dz], [0, 0, 0, 1]],
-            },
-        )
-    }
-
-    fn rotate() -> Self {
-        Self::new(
-            Mat4 {
-                entries: [[0, 0, -1, 0], [0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1]],
-            },
-            Mat4 {
-                entries: [[0, 0, 1, 0], [0, 1, 0, 0], [-1, 0, 0, 0], [0, 0, 0, 1]],
-            },
-        )
-    }
-
-    fn identity() -> Self {
-        Self::new(Mat4::identity(), Mat4::identity())
-    }
-
-    fn flip_x() -> Self {
-        Self::new(
-            Mat4 {
-                entries: [[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
-            },
-            Mat4 {
-                entries: [[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
-            },
-        )
-    }
-
-    fn flip_z() -> Self {
-        Self::new(
-            Mat4 {
-                entries: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]],
-            },
-            Mat4 {
-                entries: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]],
-            },
-        )
-    }
-
-    fn apply_pos(&self, pos: (i32, i32, i32)) -> (i32, i32, i32) {
-        let out = self.forward.apply([pos.0, pos.1, pos.2, 1]);
-        debug_assert_eq!(out[3], 1);
-        (out[0], out[1], out[2])
-    }
-
-    fn apply_vec(&self, vec: (i32, i32, i32)) -> (i32, i32, i32) {
-        let out = self.forward.apply([vec.0, vec.1, vec.2, 0]);
-        debug_assert_eq!(out[3], 0);
-        (out[0], out[1], out[2])
-    }
-
-    fn apply_compass(&self, compass: Compass) -> Compass {
-        let vec = compass.to_vec();
-        let vec = self.apply_vec((vec.0, 0, vec.1));
-        assert_eq!(vec.1, 0);
-        Compass::from_vec((vec.0, vec.2))
-    }
-}
-
-struct Coords {
-    // local -> global
-    transform: Transform,
-}
-
-impl Coords {
-    fn apply_global_transform(&mut self, transform: Transform) {
-        self.transform = transform * self.transform;
-    }
-
-    fn apply_local_transform(&mut self, transform: Transform) {
-        self.transform = self.transform * transform;
-    }
-
-    fn local_to_global_pos(&self, pos: (i32, i32, i32)) -> (i32, i32, i32) {
-        self.transform.apply_pos(pos)
-    }
-
-    fn local_to_global_vec(&self, vec: (i32, i32, i32)) -> (i32, i32, i32) {
-        self.transform.apply_vec(vec)
-    }
-
-    fn local_to_global_compass(&self, compass: Compass) -> Compass {
-        self.transform.apply_compass(compass)
-    }
-}
-
 fn barrel_ss(ss: usize) -> HashMap<String, fastnbt::Value> {
     let mut n = ((ss * 27).div_ceil(14) - 2).max(ss);
 
@@ -219,21 +60,21 @@ fn barrel_ss(ss: usize) -> HashMap<String, fastnbt::Value> {
 
     let mut result = HashMap::new();
 
-    // result.insert(
-    //     "id".to_string(),
-    //     fastnbt::Value::String("minecraft:barrel".to_string()),
-    // );
+    result.insert(
+        "Id".to_string(),
+        fastnbt::Value::String("minecraft:barrel".to_string()),
+    );
 
     result.insert("Items".to_string(), fastnbt::Value::List(items));
-
-    println!("{:?}", result);
 
     result
 }
 
 #[derive(Debug, Clone)]
 pub enum Block {
-    Plain(PlainBlock),
+    Plain {
+        id: String,
+    },
     Barrel {
         ss: Nibble,
     },
@@ -296,10 +137,11 @@ impl Blocks {
         for ((x, y, z), block) in self.blocks {
             let (x, y, z) = ((x - min_x), (y - min_y), (z - min_z));
             match block {
-                Block::Plain(block) => {
-                    region.set_block([x, y, z], &block);
+                Block::Plain { id } => {
+                    region
+                        .set_block([x, y, z], &PlainBlock::from_id(id.as_str()).unwrap())
+                        .unwrap();
                 }
-
                 Block::Dust { power } => {
                     region
                         .set_block(
@@ -371,15 +213,14 @@ impl Blocks {
                 }
 
                 Block::Barrel { ss } => {
-                    if ss == Nibble::N0 {
-                        region
-                            .set_block(
-                                [x, y, z],
-                                &mc_schem::Block::from_id("minecraft:barrel[facing=up,open=false]")
-                                    .unwrap(),
-                            )
-                            .unwrap();
-                    } else {
+                    region
+                        .set_block(
+                            [x, y, z],
+                            &mc_schem::Block::from_id("minecraft:barrel[facing=up,open=false]")
+                                .unwrap(),
+                        )
+                        .unwrap();
+                    if ss != Nibble::N0 {
                         region.set_block_entity_at(
                             [x, y, z],
                             mc_schem::region::BlockEntity {
@@ -392,419 +233,13 @@ impl Blocks {
         }
 
         let mut schem = mc_schem::Schematic::new();
+        schem.metadata.mc_data_version =
+            mc_schem::schem::mc_version::DataVersion::Java_1_18_2 as i32;
+        schem.metadata.schem_we_offset = Some([min_x, min_y, min_z]);
         schem.regions.push(region);
 
         schem
             .save_world_edit_13_writer(writer, &mc_schem::WorldEdit13SaveOption::default())
             .map_err(|_| ())
-    }
-}
-
-impl Blocks {
-    fn make_torch_rom_page(&mut self, ox: i32, oy: i32, oz: i32, nibbles: Vec<Nibble>) {
-        assert_eq!(nibbles.len(), 256);
-        fn set_nibble(schem: &mut Blocks, x: i32, y: i32, z: i32, n: Nibble) {
-            for i in 0usize..4 {
-                let dx = -2 * i as i32;
-                let block = if n.as_usize() & (1 << (3 - i)) != 0 {
-                    Block::Plain(
-                        PlainBlock::from_id("minecraft:redstone_wall_torch[facing=north]").unwrap(),
-                    )
-                } else {
-                    Block::Plain(PlainBlock::from_id("minecraft:glass").unwrap())
-                };
-                schem.place((x + dx, y, z), &block);
-            }
-        }
-
-        for (i, n) in nibbles.iter().enumerate() {
-            let (q, r) = (i / 32, i % 32);
-            set_nibble(self, ox - 8 * q as i32, oy, oz - 2 * r as i32, *n);
-        }
-    }
-
-    fn make_barrel_rom_page(&mut self, ox: i32, oy: i32, oz: i32, nibbles: Vec<Nibble>) {
-        assert_eq!(nibbles.len(), 256);
-        for a in 0usize..8 {
-            for d in 0usize..32 {
-                let pos = (ox - 2 * d as i32, oy - 2 * a as i32, oz);
-                let ss = nibbles[d + 32 * a];
-                if ss == Nibble::N0 {
-                    self.place(
-                        pos,
-                        &Block::Plain(PlainBlock::from_id("minecraft:glass").unwrap()),
-                    );
-                } else {
-                    self.place(pos, &Block::Barrel { ss });
-                }
-            }
-        }
-    }
-
-    pub fn place_rom_page(&mut self, page: Nibble, memory: &assembly::ProgramPage) {
-        let page = page.as_usize();
-        match page {
-            0 => {
-                println!("Schematics for ROM page 0 are not supported.");
-            }
-            1..=3 => {
-                self.make_torch_rom_page(-5, -10 - 5 * (page as i32 - 1), -5, memory.nibbles());
-            }
-            4..=15 => {
-                self.make_barrel_rom_page(
-                    -13,
-                    -11 - if page.is_multiple_of(2) { 16 } else { 0 },
-                    13 + 4 * ((page as i32 - 4) / 2),
-                    memory.nibbles(),
-                );
-            }
-            _ => {
-                panic!("Invalid ROM page {}", page);
-            }
-        }
-    }
-}
-
-struct RamCard {
-    coords: Coords,
-    section_sizes: Vec<usize>,
-    data_block: Block,
-    read_block: Block,
-}
-
-impl RamCard {
-    // first: The block at the very end where the input logic is
-    // aligned: The blocks above the output lines
-    // between: The blocks between the output lines
-    // join: The blocks between sections of output lines
-    fn place_stacked(
-        &self,
-        schem: &mut Blocks,
-        offset: (i32, i32, i32),
-        first: Option<&Block>,
-        aligned: Option<&Block>,
-        between: Option<&Block>,
-        join: Option<&Block>,
-    ) {
-        if let Some(first) = first {
-            schem.place(self.coords.local_to_global_pos(offset), first);
-        }
-        if let Some(aligned) = aligned {
-            let mut dz = 2i32;
-            for &size in &self.section_sizes {
-                for _ in 0..size {
-                    schem.place(
-                        self.coords
-                            .local_to_global_pos((offset.0, offset.1, offset.2 + dz)),
-                        aligned,
-                    );
-                    dz += 2;
-                }
-            }
-        }
-        if let Some(between) = between {
-            let mut dz = 3i32;
-            for &size in &self.section_sizes {
-                for _ in 1..size {
-                    schem.place(
-                        self.coords
-                            .local_to_global_pos((offset.0, offset.1, offset.2 + dz)),
-                        between,
-                    );
-                    dz += 2;
-                }
-                dz += 2;
-            }
-        }
-        if let Some(join) = join {
-            let mut dz = 1i32;
-            for &size in &self.section_sizes {
-                schem.place(
-                    self.coords
-                        .local_to_global_pos((offset.0, offset.1, offset.2 + dz)),
-                    join,
-                );
-                dz += 2 * size as i32;
-            }
-        }
-    }
-
-    fn place_data(&mut self, schem: &mut Blocks, data: Vec<Vec<bool>>, first: bool, last: bool) {
-        let n = self.section_sizes.len();
-        assert_eq!(n, data.len());
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..n {
-            assert_eq!(self.section_sizes[i], data[i].len());
-        }
-
-        // Read lines
-        self.place_stacked(schem, (0, 0, 0), Some(&self.read_block), None, None, None);
-        self.place_stacked(
-            schem,
-            (0, 1, 0),
-            Some(&Block::Repeater {
-                powered: true,
-                facing: self.coords.local_to_global_compass(Compass::East),
-                delay: 3,
-            }),
-            None,
-            None,
-            None,
-        );
-        self.place_stacked(
-            schem,
-            (1, 0, 0),
-            Some(&self.read_block),
-            Some(&self.read_block),
-            Some(&self.read_block),
-            Some(&self.read_block),
-        );
-        self.place_stacked(
-            schem,
-            (1, 1, 0),
-            Some(&Block::Dust { power: 15 }),
-            Some(&Block::Dust { power: 15 }),
-            Some(&Block::Dust { power: 15 }),
-            Some(&Block::Repeater {
-                powered: true,
-                facing: self.coords.local_to_global_compass(Compass::South),
-                delay: 1,
-            }),
-        );
-        // The torches for the data
-        {
-            let mut dz = 2i32;
-            for (i, &size) in self.section_sizes.iter().enumerate() {
-                for j in 0usize..size {
-                    if data[i][j] {
-                        schem.place(
-                            self.coords.local_to_global_pos((0, 0, dz)),
-                            &Block::WallTorch {
-                                lit: false,
-                                facing: self.coords.local_to_global_compass(Compass::West),
-                            },
-                        );
-                    }
-                    dz += 2;
-                }
-            }
-        }
-
-        // Data lines
-        self.place_stacked(schem, (0, -2, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(schem, (1, -2, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(
-            schem,
-            (0, -1, 0),
-            None,
-            Some(&Block::Dust { power: 0 }),
-            None,
-            None,
-        );
-        self.place_stacked(
-            schem,
-            (1, -1, 0),
-            None,
-            Some(&Block::Repeater {
-                powered: false,
-                facing: self.coords.local_to_global_compass(Compass::West),
-                delay: 3,
-            }),
-            None,
-            None,
-        );
-
-        // Update coords
-        self.coords
-            .apply_local_transform(Transform::translate((2, 0, 0)));
-    }
-
-    fn place_new_layer(&mut self, schem: &mut Blocks) {
-        // Read lines
-        schem.place(self.coords.local_to_global_pos((0, 1, 0)), &self.read_block);
-        schem.place(
-            self.coords.local_to_global_pos((0, 2, 0)),
-            &Block::Dust { power: 15 },
-        );
-        schem.place(self.coords.local_to_global_pos((1, 2, 0)), &self.read_block);
-        schem.place(
-            self.coords.local_to_global_pos((1, 3, 0)),
-            &Block::Torch { lit: false },
-        );
-        schem.place(self.coords.local_to_global_pos((1, 4, 0)), &self.read_block);
-        schem.place(
-            self.coords.local_to_global_pos((1, 5, 0)),
-            &Block::Torch { lit: true },
-        );
-
-        // Data lines
-        self.place_stacked(schem, (0, -2, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(schem, (0, 0, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(schem, (1, -1, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(schem, (2, 0, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(schem, (1, 1, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(
-            schem,
-            (0, -1, 0),
-            None,
-            Some(&Block::Dust { power: 0 }),
-            None,
-            None,
-        );
-        self.place_stacked(
-            schem,
-            (1, 0, 0),
-            None,
-            Some(&Block::Repeater {
-                powered: false,
-                facing: self.coords.local_to_global_compass(Compass::West),
-                delay: 1,
-            }),
-            None,
-            None,
-        );
-        self.place_stacked(
-            schem,
-            (2, 1, 0),
-            None,
-            Some(&Block::Dust { power: 0 }),
-            None,
-            None,
-        );
-        self.place_stacked(
-            schem,
-            (1, 2, 0),
-            None,
-            Some(&Block::Dust { power: 0 }),
-            None,
-            None,
-        );
-
-        self.coords
-            .apply_local_transform(Transform::flip_x() * Transform::translate((0, 4, 0)));
-    }
-
-    fn place_start(&mut self, schem: &mut Blocks) {
-        self.place_stacked(schem, (-1, -2, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(
-            schem,
-            (-1, -1, 0),
-            None,
-            Some(&Block::Dust { power: 0 }),
-            None,
-            None,
-        );
-        self.place_stacked(schem, (-2, -2, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(
-            schem,
-            (-2, -1, 0),
-            None,
-            Some(&Block::Dust { power: 0 }),
-            None,
-            None,
-        );
-        self.place_stacked(schem, (-3, -2, 0), None, Some(&self.data_block), None, None);
-        self.place_stacked(
-            schem,
-            (-3, -1, 0),
-            None,
-            Some(&Block::Repeater {
-                powered: false,
-                facing: self.coords.local_to_global_compass(Compass::West),
-                delay: 1,
-            }),
-            None,
-            None,
-        );
-
-        self.place_stacked(schem, (-2, 1, 0), Some(&self.read_block), None, None, None);
-        self.place_stacked(schem, (-3, 0, 0), Some(&self.read_block), None, None, None);
-        self.place_stacked(
-            schem,
-            (-1, 1, 0),
-            Some(&Block::WallTorch {
-                lit: true,
-                facing: Compass::East,
-            }),
-            None,
-            None,
-            None,
-        );
-        self.place_stacked(
-            schem,
-            (-3, 1, 0),
-            Some(&Block::Repeater {
-                powered: false,
-                facing: self.coords.local_to_global_compass(Compass::East),
-                delay: 1,
-            }),
-            None,
-            None,
-            None,
-        );
-    }
-}
-
-impl Blocks {
-    // input is a list of (addr, value) pairs to write
-    pub fn place_ram_data(&mut self, values: Vec<(u16, u16)>) {
-        println!("{:?}", values);
-
-        let mut state = RamCard {
-            coords: Coords {
-                transform: Transform::translate((47, -49, -78)),
-            },
-            section_sizes: vec![8, 6, 8, 8],
-            data_block: Block::Plain(PlainBlock::from_id("minecraft:gray_wool").unwrap()),
-            read_block: Block::Plain(PlainBlock::from_id("minecraft:lime_wool").unwrap()),
-        };
-
-        state.place_start(self);
-
-        let mut i = 0;
-        let layer_at_i = 8;
-        for (addr, value) in values {
-            // Data
-            {
-                if i == layer_at_i {
-                    i = 0;
-                    state.place_new_layer(self);
-                }
-                state.place_data(
-                    self,
-                    vec![
-                        (0..8).map(|i| (addr >> i) & 1 != 0).collect(),
-                        (8..12)
-                            .map(|i| (addr >> i) & 1 != 0)
-                            .chain(vec![false, true])
-                            .collect(),
-                        (0..8).map(|i| (value >> i) & 1 != 0).collect(),
-                        (8..16).map(|i| (value >> i) & 1 != 0).collect(),
-                    ],
-                    i == 0,
-                    i == layer_at_i - 1,
-                );
-                i += 1;
-            }
-            {
-                // Dummy for more delay
-                if i == layer_at_i {
-                    i = 0;
-                    state.place_new_layer(self);
-                }
-                state.place_data(
-                    self,
-                    vec![
-                        (0..8).map(|_| false).collect(),
-                        (8..12).map(|_| false).chain(vec![false, false]).collect(),
-                        (0..8).map(|_| false).collect(),
-                        (8..16).map(|_| false).collect(),
-                    ],
-                    i == 0,
-                    i == layer_at_i - 1,
-                );
-                i += 1;
-            }
-        }
     }
 }
