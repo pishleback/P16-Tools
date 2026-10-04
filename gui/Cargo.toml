@@ -47,6 +47,7 @@ web-sys = { version = "0.3.70", features = [
     "Window",
 ] }
 js-sys = "0.3.81"
+getrandom = { version = "0.2.17", features = ["js"] }
 
 [profile.release]
 opt-level = 2 # fast and small wasm
