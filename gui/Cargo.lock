@@ -3244,8 +3244,6 @@ dependencies = [
 name = "schemgen"
 version = "0.0.1"
 dependencies = [
- "assembly",
- "fastnbt",
  "mc_schem",
 ]
 

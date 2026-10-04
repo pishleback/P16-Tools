@@ -380,7 +380,7 @@ fn make_barrel_rom_page(blocks: &mut Blocks, ox: i32, oy: i32, oz: i32, nibbles:
                     },
                 );
             } else {
-                blocks.place(pos, &Block::Barrel { ss });
+                blocks.place(pos, &Block::Barrel { ss: ss.as_usize() });
             }
         }
     }

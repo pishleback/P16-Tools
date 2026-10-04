@@ -21,7 +21,7 @@ eframe = { version = "0.32", default-features = false, features = [
 ] }
 log = "0.4.27"
 assembly = { path = "../assembly", version = "0.0.1" }
-schemgen = { path = "../schemgen", version = "0.0.1" }
+schemgen = { path = "../../RedstoneSchematicGenerator", version = "0.0.1" }
 lalrpop-util = { version = "0.21.0", features = ["lexer", "unicode"] }
 
 # You only need serde if you want app persistence:
