@@ -1,4 +1,4 @@
-use mcschem::Block as PlainBlock;
+use mc_schem::Block as PlainBlock;
 use schemgen::{Block, Blocks};
 use std::str::FromStr;
 
@@ -7,19 +7,19 @@ fn main() {
 
     schem.place(
         (-2, -1, -2),
-        &Block::Plain(PlainBlock::from_str("minecraft:dirt").unwrap()),
+        &Block::Plain(PlainBlock::from_id("minecraft:dirt").unwrap()),
     );
     schem.place(
         (2, -1, 2),
-        &Block::Plain(PlainBlock::from_str("minecraft:dirt").unwrap()),
+        &Block::Plain(PlainBlock::from_id("minecraft:dirt").unwrap()),
     );
     schem.place(
         (2, -1, -2),
-        &Block::Plain(PlainBlock::from_str("minecraft:stone").unwrap()),
+        &Block::Plain(PlainBlock::from_id("minecraft:stone").unwrap()),
     );
     schem.place(
         (-2, -1, 2),
-        &Block::Plain(PlainBlock::from_str("minecraft:glass").unwrap()),
+        &Block::Plain(PlainBlock::from_id("minecraft:glass").unwrap()),
     );
     schem.place(
         (0, -1, 0),

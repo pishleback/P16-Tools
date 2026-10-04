@@ -1,10 +1,10 @@
 pub use assembly::Nibble;
-use mcschem::Block as PlainBlock;
+use mc_schem::{Block as PlainBlock, region::Region};
 use std::{collections::HashMap, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Mat4 {
-    entries: [[i16; 4]; 4],
+    entries: [[i32; 4]; 4],
 }
 
 impl Mat4 {
@@ -20,7 +20,7 @@ impl Mat4 {
         }
     }
 
-    fn apply(&self, vec: [i16; 4]) -> [i16; 4] {
+    fn apply(&self, vec: [i32; 4]) -> [i32; 4] {
         std::array::from_fn(|r| (0usize..4).map(|c| self.entries[r][c] * vec[c]).sum())
     }
 }
@@ -51,7 +51,7 @@ pub enum Compass {
 
 impl Compass {
     // To (dx, dy) of length 1 pointing in the direction of self
-    fn to_vec(self) -> (i16, i16) {
+    fn to_vec(self) -> (i32, i32) {
         match self {
             Compass::North => (0, -1),
             Compass::East => (1, 0),
@@ -61,7 +61,7 @@ impl Compass {
     }
 
     // From (dx, dy) of length 1 pointing in the direction of self
-    fn from_vec(vec: (i16, i16)) -> Self {
+    fn from_vec(vec: (i32, i32)) -> Self {
         match vec {
             (0, -1) => Self::North,
             (1, 0) => Self::East,
@@ -99,7 +99,7 @@ impl Transform {
         Self::new(self.backward, self.forward)
     }
 
-    fn translate((dx, dy, dz): (i16, i16, i16)) -> Self {
+    fn translate((dx, dy, dz): (i32, i32, i32)) -> Self {
         Self::new(
             Mat4 {
                 entries: [[1, 0, 0, dx], [0, 1, 0, dy], [0, 0, 1, dz], [0, 0, 0, 1]],
@@ -147,13 +147,13 @@ impl Transform {
         )
     }
 
-    fn apply_pos(&self, pos: (i16, i16, i16)) -> (i16, i16, i16) {
+    fn apply_pos(&self, pos: (i32, i32, i32)) -> (i32, i32, i32) {
         let out = self.forward.apply([pos.0, pos.1, pos.2, 1]);
         debug_assert_eq!(out[3], 1);
         (out[0], out[1], out[2])
     }
 
-    fn apply_vec(&self, vec: (i16, i16, i16)) -> (i16, i16, i16) {
+    fn apply_vec(&self, vec: (i32, i32, i32)) -> (i32, i32, i32) {
         let out = self.forward.apply([vec.0, vec.1, vec.2, 0]);
         debug_assert_eq!(out[3], 0);
         (out[0], out[1], out[2])
@@ -181,17 +181,54 @@ impl Coords {
         self.transform = self.transform * transform;
     }
 
-    fn local_to_global_pos(&self, pos: (i16, i16, i16)) -> (i16, i16, i16) {
+    fn local_to_global_pos(&self, pos: (i32, i32, i32)) -> (i32, i32, i32) {
         self.transform.apply_pos(pos)
     }
 
-    fn local_to_global_vec(&self, vec: (i16, i16, i16)) -> (i16, i16, i16) {
+    fn local_to_global_vec(&self, vec: (i32, i32, i32)) -> (i32, i32, i32) {
         self.transform.apply_vec(vec)
     }
 
     fn local_to_global_compass(&self, compass: Compass) -> Compass {
         self.transform.apply_compass(compass)
     }
+}
+
+fn barrel_ss(ss: usize) -> HashMap<String, fastnbt::Value> {
+    let mut n = ((ss * 27).div_ceil(14) - 2).max(ss);
+
+    if ss == 14 {
+        n += 1;
+    }
+
+    let mut items = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let mut item = HashMap::new();
+
+        item.insert("Count".to_string(), fastnbt::Value::Byte(64));
+        item.insert("Slot".to_string(), fastnbt::Value::Byte(i as i8));
+        item.insert(
+            "id".to_string(),
+            fastnbt::Value::String("minecraft:redstone".to_string()),
+        );
+        item.insert("tag".to_string(), fastnbt::Value::Compound(HashMap::new()));
+
+        items.push(fastnbt::Value::Compound(item));
+    }
+
+    let mut result = HashMap::new();
+
+    // result.insert(
+    //     "id".to_string(),
+    //     fastnbt::Value::String("minecraft:barrel".to_string()),
+    // );
+
+    result.insert("Items".to_string(), fastnbt::Value::List(items));
+
+    println!("{:?}", result);
+
+    result
 }
 
 #[derive(Debug, Clone)]
@@ -218,7 +255,7 @@ pub enum Block {
 }
 
 pub struct Blocks {
-    blocks: HashMap<(i16, i16, i16), Block>,
+    blocks: HashMap<(i32, i32, i32), Block>,
 }
 
 impl Blocks {
@@ -229,7 +266,7 @@ impl Blocks {
         }
     }
 
-    pub fn place(&mut self, pos: (i16, i16, i16), block: &Block) {
+    pub fn place(&mut self, pos: (i32, i32, i32), block: &Block) {
         if self.blocks.insert(pos, block.clone()).is_some() {
             panic!("Pos {:?} taken.", pos);
         }
@@ -254,66 +291,58 @@ impl Blocks {
         let max_z = self.blocks.iter().map(|((_, _, z), _)| *z).max().unwrap();
         let size_z = max_z - min_z + 1;
 
-        let mut schem = mcschem::Schematic::new(
-            mcschem::data_version::MC_1_18_2,
-            size_x as u16,
-            size_y as u16,
-            size_z as u16,
-        );
+        let mut region = Region::with_shape([size_x, size_y, size_z]);
+
         for ((x, y, z), block) in self.blocks {
-            let (x, y, z) = (
-                (x - min_x) as usize,
-                (y - min_y) as usize,
-                (z - min_z) as usize,
-            );
+            let (x, y, z) = ((x - min_x), (y - min_y), (z - min_z));
             match block {
                 Block::Plain(block) => {
-                    schem.set_block(x, y, z, block);
+                    region.set_block([x, y, z], &block);
                 }
 
                 Block::Dust { power } => {
-                    schem.set_block(
-                        x,
-                        y,
-                        z,
-                        mcschem::Block::from_str(
-                            format!("minecraft:redstone_wire[power={power}]").as_str(),
+                    region
+                        .set_block(
+                            [x, y, z],
+                            &mc_schem::Block::from_id(
+                                format!("minecraft:redstone_wire[power={power}]").as_str(),
+                            )
+                            .unwrap(),
                         )
-                        .unwrap(),
-                    );
+                        .unwrap();
                 }
 
                 Block::Torch { lit } => {
-                    schem.set_block(
-                        x,
-                        y,
-                        z,
-                        mcschem::Block::from_str(
-                            format!("minecraft:redstone_torch[lit={lit}]").as_str(),
+                    region
+                        .set_block(
+                            [x, y, z],
+                            &mc_schem::Block::from_id(
+                                format!("minecraft:redstone_torch[lit={lit}]").as_str(),
+                            )
+                            .unwrap(),
                         )
-                        .unwrap(),
-                    );
+                        .unwrap();
                 }
 
                 Block::WallTorch { lit, facing } => {
-                    schem.set_block(
-                        x,
-                        y,
-                        z,
-                        mcschem::Block::from_str(
-                            format!(
-                                "minecraft:redstone_wall_torch[lit={lit},facing={}]",
-                                match facing {
-                                    Compass::North => "north",
-                                    Compass::East => "east",
-                                    Compass::South => "south",
-                                    Compass::West => "west",
-                                }
+                    region
+                        .set_block(
+                            [x, y, z],
+                            &mc_schem::Block::from_id(
+                                format!(
+                                    "minecraft:redstone_wall_torch[lit={lit},facing={}]",
+                                    match facing {
+                                        Compass::North => "north",
+                                        Compass::East => "east",
+                                        Compass::South => "south",
+                                        Compass::West => "west",
+                                    }
+                                )
+                                .as_str(),
                             )
-                            .as_str(),
+                            .unwrap(),
                         )
-                        .unwrap(),
-                    );
+                        .unwrap();
                 }
 
                 Block::Repeater {
@@ -321,69 +350,68 @@ impl Blocks {
                     facing,
                     delay,
                 } => {
-                    schem.set_block(
-                        x,
-                        y,
-                        z,
-                        mcschem::Block::from_str(
-                            format!(
-                                "minecraft:repeater[facing={},powered={powered},delay={delay}]",
-                                match facing {
-                                    Compass::North => "south",
-                                    Compass::East => "west",
-                                    Compass::South => "north",
-                                    Compass::West => "east",
-                                }
+                    region
+                        .set_block(
+                            [x, y, z],
+                            &mc_schem::Block::from_id(
+                                format!(
+                                    "minecraft:repeater[facing={},powered={powered},delay={delay}]",
+                                    match facing {
+                                        Compass::North => "south",
+                                        Compass::East => "west",
+                                        Compass::South => "north",
+                                        Compass::West => "east",
+                                    }
+                                )
+                                .as_str(),
                             )
-                            .as_str(),
+                            .unwrap(),
                         )
-                        .unwrap(),
-                    );
+                        .unwrap();
                 }
 
                 Block::Barrel { ss } => {
                     if ss == Nibble::N0 {
-                        schem.set_block(
-                            x,
-                            y,
-                            z,
-                            mcschem::Block::from_str("minecraft:barrel[facing=up,open=false]")
-                                .unwrap(),
-                        );
+                        region
+                            .set_block(
+                                [x, y, z],
+                                &mc_schem::Block::from_id("minecraft:barrel[facing=up,open=false]")
+                                    .unwrap(),
+                            )
+                            .unwrap();
                     } else {
-                        schem.set_block_entity(
-                            x,
-                            y,
-                            z,
-                            mcschem::Block::from_str("minecraft:barrel[facing=up,open=false]")
-                                .unwrap(),
-                            mcschem::BlockEntity::Barrel {
-                                items: mcschem::utils::barrel_ss(ss.as_usize()),
+                        region.set_block_entity_at(
+                            [x, y, z],
+                            mc_schem::region::BlockEntity {
+                                tags: barrel_ss(ss.as_usize()),
                             },
                         );
                     }
                 }
             };
         }
+
+        let mut schem = mc_schem::Schematic::new();
+        schem.regions.push(region);
+
         schem
-            .export(writer, (min_x as i32, min_y as i32, min_z as i32))
+            .save_world_edit_13_writer(writer, &mc_schem::WorldEdit13SaveOption::default())
             .map_err(|_| ())
     }
 }
 
 impl Blocks {
-    fn make_torch_rom_page(&mut self, ox: i16, oy: i16, oz: i16, nibbles: Vec<Nibble>) {
+    fn make_torch_rom_page(&mut self, ox: i32, oy: i32, oz: i32, nibbles: Vec<Nibble>) {
         assert_eq!(nibbles.len(), 256);
-        fn set_nibble(schem: &mut Blocks, x: i16, y: i16, z: i16, n: Nibble) {
+        fn set_nibble(schem: &mut Blocks, x: i32, y: i32, z: i32, n: Nibble) {
             for i in 0usize..4 {
-                let dx = -2 * i as i16;
+                let dx = -2 * i as i32;
                 let block = if n.as_usize() & (1 << (3 - i)) != 0 {
                     Block::Plain(
-                        PlainBlock::from_str("minecraft:redstone_wall_torch[facing=north]")
-                            .unwrap(),
+                        PlainBlock::from_id("minecraft:redstone_wall_torch[facing=north]").unwrap(),
                     )
                 } else {
-                    Block::Plain(PlainBlock::from_str("minecraft:glass").unwrap())
+                    Block::Plain(PlainBlock::from_id("minecraft:glass").unwrap())
                 };
                 schem.place((x + dx, y, z), &block);
             }
@@ -391,20 +419,20 @@ impl Blocks {
 
         for (i, n) in nibbles.iter().enumerate() {
             let (q, r) = (i / 32, i % 32);
-            set_nibble(self, ox - 8 * q as i16, oy, oz - 2 * r as i16, *n);
+            set_nibble(self, ox - 8 * q as i32, oy, oz - 2 * r as i32, *n);
         }
     }
 
-    fn make_barrel_rom_page(&mut self, ox: i16, oy: i16, oz: i16, nibbles: Vec<Nibble>) {
+    fn make_barrel_rom_page(&mut self, ox: i32, oy: i32, oz: i32, nibbles: Vec<Nibble>) {
         assert_eq!(nibbles.len(), 256);
         for a in 0usize..8 {
             for d in 0usize..32 {
-                let pos = (ox - 2 * d as i16, oy - 2 * a as i16, oz);
+                let pos = (ox - 2 * d as i32, oy - 2 * a as i32, oz);
                 let ss = nibbles[d + 32 * a];
                 if ss == Nibble::N0 {
                     self.place(
                         pos,
-                        &Block::Plain(PlainBlock::from_str("minecraft:glass").unwrap()),
+                        &Block::Plain(PlainBlock::from_id("minecraft:glass").unwrap()),
                     );
                 } else {
                     self.place(pos, &Block::Barrel { ss });
@@ -420,13 +448,13 @@ impl Blocks {
                 println!("Schematics for ROM page 0 are not supported.");
             }
             1..=3 => {
-                self.make_torch_rom_page(-5, -10 - 5 * (page as i16 - 1), -5, memory.nibbles());
+                self.make_torch_rom_page(-5, -10 - 5 * (page as i32 - 1), -5, memory.nibbles());
             }
             4..=15 => {
                 self.make_barrel_rom_page(
                     -13,
                     -11 - if page.is_multiple_of(2) { 16 } else { 0 },
-                    13 + 4 * ((page as i16 - 4) / 2),
+                    13 + 4 * ((page as i32 - 4) / 2),
                     memory.nibbles(),
                 );
             }
@@ -452,7 +480,7 @@ impl RamCard {
     fn place_stacked(
         &self,
         schem: &mut Blocks,
-        offset: (i16, i16, i16),
+        offset: (i32, i32, i32),
         first: Option<&Block>,
         aligned: Option<&Block>,
         between: Option<&Block>,
@@ -462,7 +490,7 @@ impl RamCard {
             schem.place(self.coords.local_to_global_pos(offset), first);
         }
         if let Some(aligned) = aligned {
-            let mut dz = 2i16;
+            let mut dz = 2i32;
             for &size in &self.section_sizes {
                 for _ in 0..size {
                     schem.place(
@@ -475,7 +503,7 @@ impl RamCard {
             }
         }
         if let Some(between) = between {
-            let mut dz = 3i16;
+            let mut dz = 3i32;
             for &size in &self.section_sizes {
                 for _ in 1..size {
                     schem.place(
@@ -489,14 +517,14 @@ impl RamCard {
             }
         }
         if let Some(join) = join {
-            let mut dz = 1i16;
+            let mut dz = 1i32;
             for &size in &self.section_sizes {
                 schem.place(
                     self.coords
                         .local_to_global_pos((offset.0, offset.1, offset.2 + dz)),
                     join,
                 );
-                dz += 2 * size as i16;
+                dz += 2 * size as i32;
             }
         }
     }
@@ -545,7 +573,7 @@ impl RamCard {
         );
         // The torches for the data
         {
-            let mut dz = 2i16;
+            let mut dz = 2i32;
             for (i, &size) in self.section_sizes.iter().enumerate() {
                 for j in 0usize..size {
                     if data[i][j] {
@@ -727,8 +755,8 @@ impl Blocks {
                 transform: Transform::translate((47, -49, -78)),
             },
             section_sizes: vec![8, 6, 8, 8],
-            data_block: Block::Plain(PlainBlock::from_str("minecraft:gray_wool").unwrap()),
-            read_block: Block::Plain(PlainBlock::from_str("minecraft:lime_wool").unwrap()),
+            data_block: Block::Plain(PlainBlock::from_id("minecraft:gray_wool").unwrap()),
+            read_block: Block::Plain(PlainBlock::from_id("minecraft:lime_wool").unwrap()),
         };
 
         state.place_start(self);
