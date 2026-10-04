@@ -3,8 +3,8 @@ use crate::app::state::State;
 use assembly::ProgramPagePtr;
 use assembly::{CompiledLine, FullCompileResult, Nibble};
 use egui::{Color32, TextBuffer, TextFormat, Ui, Visuals, text::LayoutJob};
-use schemgen::transforms::{Coords, Transform};
-use schemgen::{Block, Blocks, Compass};
+use redstone_schem::transforms::{Coords, Transform};
+use redstone_schem::{Block, Blocks, Compass};
 use std::collections::HashSet;
 
 #[cfg(target_arch = "wasm32")]
@@ -60,7 +60,7 @@ mod save_schem {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod save_schem {
-    use schemgen::Blocks;
+    use redstone_schem::Blocks;
 
     pub fn save(schem: Blocks) {
         if let Some(path) = rfd::FileDialog::new()
@@ -101,7 +101,7 @@ pub fn update(
                     })
                     .clicked()
                 {
-                    let mut schem = schemgen::Blocks::new();
+                    let mut schem = redstone_schem::Blocks::new();
                     for i in 1u8..16 {
                         let i = Nibble::new(i).unwrap();
                         place_rom_page(&mut schem, i, raw_memory.rom_page(i));
